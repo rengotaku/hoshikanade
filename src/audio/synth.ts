@@ -1,4 +1,3 @@
-import * as Tone from 'tone'
 import { POND_HALF } from '../config'
 
 /**
@@ -10,48 +9,54 @@ import { POND_HALF } from '../config'
  * - 下に薄いアンビエント・パッド（fat オシレータ＋極低速 LFO ローパス）を流し続ける。
  * - マスターチェーン: Reverb → EQ3 → Compressor → Limiter → Destination。
  * - 解禁は最初のクリックで Tone.start()。音量はゆるやかにフェードイン。Limiter で安全。
+ *
+ * Tone.js は重いので動的 import で遅延読み込みし、初回描画を軽くする（映像はクリック前から動く）。
  */
 
 const TARGET_DB = -10
 
+type ToneMod = typeof import('tone')
+
 type Engine = {
-  reverb: Tone.Reverb
-  eq: Tone.EQ3
-  pad: Tone.PolySynth<Tone.Synth>
-  padFilter: Tone.Filter
-  padLfo: Tone.LFO
-  padLoop: Tone.Loop
+  reverb: import('tone').Reverb
+  eq: import('tone').EQ3
 }
 
+let Tone: ToneMod | null = null
 let engine: Engine | null = null
 let started = false
 let muted = false
 let activeVoices = 0
 
+async function loadTone(): Promise<ToneMod> {
+  if (!Tone) Tone = await import('tone')
+  return Tone
+}
+
 /** マスターチェーンとアンビエント・パッドを構築する。 */
-function buildEngine(): Engine {
-  const limiter = new Tone.Limiter(-1).toDestination()
-  const comp = new Tone.Compressor({
+function buildEngine(T: ToneMod): Engine {
+  const limiter = new T.Limiter(-1).toDestination()
+  const comp = new T.Compressor({
     threshold: -22,
     ratio: 3,
     attack: 0.05,
     release: 0.25,
   }).connect(limiter)
-  const eq = new Tone.EQ3({ low: -1, mid: 0, high: 1.5 }).connect(comp)
-  const reverb = new Tone.Reverb({ decay: 5, preDelay: 0.08, wet: 0.42 }).connect(eq)
+  const eq = new T.EQ3({ low: -1, mid: 0, high: 1.5 }).connect(comp)
+  const reverb = new T.Reverb({ decay: 5, preDelay: 0.08, wet: 0.42 }).connect(eq)
 
   // --- アンビエント・パッド（薄いドローン） ---
-  const padFilter = new Tone.Filter({
+  const padFilter = new T.Filter({
     type: 'lowpass',
     frequency: 600,
     rolloff: -24,
     Q: 0.8,
   }).connect(reverb)
-  const padLfo = new Tone.LFO(0.04, 260, 1100) // 0.04Hz の極低速スイープ
+  const padLfo = new T.LFO(0.04, 260, 1100) // 0.04Hz の極低速スイープ
   padLfo.connect(padFilter.frequency)
   padLfo.start()
 
-  const pad = new Tone.PolySynth(Tone.Synth, {
+  const pad = new T.PolySynth(T.Synth, {
     oscillator: { type: 'fatsine', count: 3, spread: 30 },
     envelope: { attack: 3, decay: 2, sustain: 0.85, release: 6 },
     volume: -26,
@@ -63,28 +68,28 @@ function buildEngine(): Engine {
     ['A1', 'E2', 'A2', 'C3'],
   ]
   let chordIdx = 0
-  const padLoop = new Tone.Loop((time) => {
+  const padLoop = new T.Loop((time) => {
     pad.releaseAll(time)
     pad.triggerAttack(padChords[chordIdx % padChords.length], time + 0.05)
     chordIdx += 1
-  }, 19) // 19 秒周期（パッド以外と噛み合わせない素数寄りの値）
+  }, 19) // 19 秒周期（素数寄りで他と噛み合わせない）
   padLoop.start(0)
 
-  return { reverb, eq, pad, padFilter, padLfo, padLoop }
+  return { reverb, eq }
 }
 
 /** ユーザー操作（クリック）後に呼ぶ。AudioContext を起動し、音を立ち上げる。 */
 export async function startAudio(): Promise<void> {
   if (started) return
-  await Tone.start()
-  engine = buildEngine()
+  const T = await loadTone()
+  await T.start()
+  engine = buildEngine(T)
   await engine.reverb.ready
 
-  Tone.getDestination().volume.value = -Infinity
-  Tone.getTransport().start()
+  T.getDestination().volume.value = -Infinity
+  T.getTransport().start()
   started = true
-  // ゆるやかにフェードイン
-  Tone.getDestination().volume.rampTo(TARGET_DB, 3)
+  T.getDestination().volume.rampTo(TARGET_DB, 3) // ゆるやかにフェードイン
 }
 
 /**
@@ -92,15 +97,16 @@ export async function startAudio(): Promise<void> {
  * x はシーン上の横位置（[-POND_HALF, POND_HALF]）で、左右の定位に使う。
  */
 export function playNote(note: string, x: number): void {
-  if (!started) return
+  if (!started || !Tone || !engine) return
   if (activeVoices > 16) return // 同時発音の暴走を防ぐ
+  const T = Tone
 
   const pan = Math.max(-1, Math.min(1, x / POND_HALF))
-  const panVol = new Tone.PanVol(pan, 0)
-  panVol.connect(engine!.reverb)
-  panVol.connect(engine!.eq) // ドライ成分も少し
+  const panVol = new T.PanVol(pan, 0)
+  panVol.connect(engine.reverb)
+  panVol.connect(engine.eq) // ドライ成分も少し
 
-  const voice = new Tone.Synth({
+  const voice = new T.Synth({
     oscillator: { partials: [1, 0, 2, 0, 3] }, // 木質の倍音（マリンバ）
     envelope: { attack: 0.001, decay: 1.2, sustain: 0, release: 1.2 },
     volume: -6,
@@ -111,7 +117,6 @@ export function playNote(note: string, x: number): void {
   voice.triggerAttackRelease(note, '2n', undefined, velocity)
 
   activeVoices += 1
-  // 余韻が消えてから破棄
   setTimeout(() => {
     voice.dispose()
     panVol.dispose()
@@ -122,7 +127,7 @@ export function playNote(note: string, x: number): void {
 /** ミュート切り替え（クリックノイズを避けて短くランプ）。 */
 export function setMuted(next: boolean): void {
   muted = next
-  if (!started) return
+  if (!started || !Tone) return
   Tone.getDestination().volume.rampTo(next ? -Infinity : TARGET_DB, 0.15)
 }
 
@@ -132,14 +137,14 @@ export function isMuted(): boolean {
 
 /** タブ非表示時に CPU/バッテリーを節約しつつ音を止める。 */
 export function suspendAudio(): void {
-  if (!started) return
+  if (!started || !Tone) return
   Tone.getDestination().volume.rampTo(-Infinity, 0.4)
   Tone.getTransport().pause()
 }
 
 /** タブ復帰時に音を戻す（iOS の interrupted 対策で start も呼ぶ）。 */
 export async function resumeAudio(): Promise<void> {
-  if (!started) return
+  if (!started || !Tone) return
   await Tone.start()
   Tone.getTransport().start()
   Tone.getDestination().volume.rampTo(muted ? -Infinity : TARGET_DB, 0.4)
