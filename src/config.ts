@@ -39,10 +39,10 @@ export const MAX_IMPACTS = 12
 export const WAVE_DAMPING = 0.994
 
 /** 高さ → 頂点変位のスケール（ワールド単位）。 */
-export const WATER_DISP_SCALE = 0.16
+export const WATER_DISP_SCALE = 0.2
 
-/** 高さ勾配 → 法線の強さ（映り込みの歪み量）。 */
-export const WATER_NORMAL_STRENGTH = 1.7
+/** 高さ勾配 → 法線の強さ（映り込みの歪み量）。波が光を拾うよう強めに。 */
+export const WATER_NORMAL_STRENGTH = 2.4
 
 /** 着水時に水面へ与える波の強さ（通常／バー命中）。 */
 export const IMPACT_STRENGTH = 0.42

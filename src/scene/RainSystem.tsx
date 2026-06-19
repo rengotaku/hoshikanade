@@ -7,6 +7,7 @@ import {
   POND_HALF,
   SPAWN_INTERVAL_MAX,
   SPAWN_INTERVAL_MIN,
+  WATER_LEVEL,
   worldToUv,
 } from '../config'
 import { playNote } from '../audio/synth'
@@ -15,8 +16,14 @@ import { Drop } from './Drop'
 import { Ripple, type RippleVariant } from './Ripple'
 import { XylophoneBar } from './XylophoneBar'
 
-type DropState = { id: number; x: number; z: number }
-type RippleState = { id: number; x: number; z: number; variant: RippleVariant }
+type DropState = { id: number; x: number; z: number; landY: number }
+type RippleState = {
+  id: number
+  x: number
+  z: number
+  y: number
+  variant: RippleVariant
+}
 
 const randRange = (min: number, max: number) => min + Math.random() * (max - min)
 const randPond = () => randRange(-POND_HALF * 0.95, POND_HALF * 0.95)
@@ -32,6 +39,14 @@ function barIndexAt(x: number, z: number): number {
     }
   }
   return -1
+}
+
+/** (x,z) に落ちた滴の着地高さ。バー上ならバー天面、なければ水面。 */
+function landingYAt(x: number, z: number): number {
+  const idx = barIndexAt(x, z)
+  if (idx < 0) return WATER_LEVEL
+  const bar = BARS[idx]
+  return bar.position[1] + bar.size[1] / 2
 }
 
 /**
@@ -54,7 +69,9 @@ export function RainSystem({ field }: { field: WaterField }) {
     if (spawnTimer.current <= 0) {
       spawnTimer.current = nextInterval()
       const id = nextId.current++
-      setDrops((prev) => [...prev, { id, x: randPond(), z: randPond() }])
+      const x = randPond()
+      const z = randPond()
+      setDrops((prev) => [...prev, { id, x, z, landY: landingYAt(x, z) }])
     }
   })
 
@@ -77,9 +94,10 @@ export function RainSystem({ field }: { field: WaterField }) {
     })
 
     const rippleId = nextId.current++
+    const y = hit ? BARS[barIdx].position[1] + BARS[barIdx].size[1] / 2 : WATER_LEVEL
     setRipples((prev) => [
       ...prev,
-      { id: rippleId, x, z, variant: hit ? 'hit' : 'normal' },
+      { id: rippleId, x, z, y, variant: hit ? 'hit' : 'normal' },
     ])
   }, [field])
 
@@ -94,7 +112,7 @@ export function RainSystem({ field }: { field: WaterField }) {
       ))}
 
       {drops.map((d) => (
-        <Drop key={d.id} id={d.id} x={d.x} z={d.z} onLand={handleLand} />
+        <Drop key={d.id} id={d.id} x={d.x} z={d.z} landY={d.landY} onLand={handleLand} />
       ))}
 
       {ripples.map((r) => (
@@ -103,6 +121,7 @@ export function RainSystem({ field }: { field: WaterField }) {
           id={r.id}
           x={r.x}
           z={r.z}
+          y={r.y}
           variant={r.variant}
           onDone={handleRippleDone}
         />
