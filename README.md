@@ -8,8 +8,10 @@
 
 ```bash
 npm install
-npm run dev
+npm run dev      # または: make run
 ```
+
+`make help` で全タスク（run / build / preview / smoke / typecheck / clean）を表示。
 
 ブラウザが開いたら、最初に一度クリックして音を有効にする（ブラウザの自動再生制限のため）。映像はクリック前から自動で動く。右下のボタンでミュート切り替え。
 
