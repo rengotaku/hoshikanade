@@ -38,6 +38,7 @@ npm run smoke      # ヘッドレス Chromium で WebGL/シェーダの実行時
 - **マリンバの鉄琴バー**：横一列に並べた 7 本のバーにペンタトニック音階を割り当て。雫が当たると、その位置に応じて左右へ定位した温かい音が鳴り、バーが発光する。
 - **アンビエントな音響**：マリンバの単音の下に、極低速で揺れるパッドのドローン。Reverb→EQ→Compressor→Limiter のマスターチェーンで整音。タブ非表示で自動停止・復帰。
 - **夜の情景**：月明かりの映り込み、霧の粒子、緩やかな自動回転カメラ、フォグと Bloom と色調補正で落ち着いた雰囲気に。
+- **楽譜の書き出し**：鳴った音を記録し、右下パネルのボタンで五線譜（SVG）としてダウンロードできる。
 
 ## 構成
 
@@ -50,6 +51,10 @@ src/
     WaterSim.tsx         GPU 波動方程式（ping-pong FBO）
     WaterPlane.tsx       高さ場から変位・法線を作る水面マテリアル
   state/settings.ts      実行時設定（雨量・自動スライド）
+  audio/recorder.ts      鳴った音の記録（楽譜書き出し用）
+  score/
+    toAbc.ts             音→ABC記譜への変換
+    downloadScore.ts     abcjs で五線譜SVGを生成して保存
   scene/
     Scene.tsx            Canvas・カメラ・ライト・環境・月・後処理
     Effects.tsx          Bloom / 色調補正 / Vignette
@@ -59,7 +64,7 @@ src/
     XylophoneBar.tsx     鉄琴バー（発光）
   ui/
     StartOverlay.tsx     音解禁のための初回クリック
-    Controls.tsx         雨量スライダー・自動スライド・ミュート
+    Controls.tsx         雨量スライダー・自動スライド・楽譜DL・ミュート
 ```
 
 波紋は手描きのリングではなく、水面シミュレーション（高さ場の波動方程式）が

@@ -1,12 +1,25 @@
 import { useState } from 'react'
 import { isMuted, setMuted } from '../audio/synth'
 import { settings, setAutoSlide, setRain } from '../state/settings'
+import { downloadScore } from '../score/downloadScore'
 
-/** 右下の小さな操作パネル。雨量スライダー・自動スライド切替・ミュート。 */
+/** 右下の小さな操作パネル。雨量スライダー・自動スライド切替・楽譜DL・ミュート。 */
 export function Controls() {
   const [mute, setMute] = useState(isMuted())
   const [rain, setRainState] = useState(settings.rain)
   const [slide, setSlide] = useState(settings.autoSlide)
+  const [scoreMsg, setScoreMsg] = useState<string | null>(null)
+
+  const handleScore = async () => {
+    setScoreMsg('生成中…')
+    try {
+      const ok = await downloadScore()
+      setScoreMsg(ok ? '保存しました' : 'まだ音がありません')
+    } catch {
+      setScoreMsg('生成に失敗しました')
+    }
+    setTimeout(() => setScoreMsg(null), 2500)
+  }
 
   return (
     <div className="controls">
@@ -35,6 +48,10 @@ export function Controls() {
         }}
       >
         {slide ? '◇ 自動スライド: ON' : '◇ 自動スライド: OFF'}
+      </button>
+
+      <button className="control-toggle" onClick={handleScore}>
+        {scoreMsg ?? '♪ 楽譜をダウンロード'}
       </button>
 
       <button

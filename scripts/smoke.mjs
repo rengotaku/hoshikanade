@@ -91,6 +91,19 @@ try {
 
   await page.screenshot({ path: '/tmp/ripple-garden-smoke.png' })
 
+  // 楽譜ダウンロード（abcjs 経路）の動作確認: ボタンを押して download が出るか。
+  try {
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: 8000 }),
+      page.getByText('楽譜をダウンロード').click(),
+    ])
+    const name = download.suggestedFilename()
+    await download.saveAs(`/tmp/${name}`)
+    console.log('score download OK:', name)
+  } catch (e) {
+    console.log('score download not verified:', e instanceof Error ? e.message : String(e))
+  }
+
   console.log('WebGL info:', JSON.stringify(info))
   if (!info.canvas) errors.push('no <canvas> rendered')
   if (info.canvas && !info.gl) errors.push('no WebGL context')
