@@ -31,7 +31,7 @@ export function XylophoneBar({ bar, lastHitRef }: XylophoneBarProps) {
   })
 
   return (
-    <mesh position={[...bar.position]} castShadow receiveShadow>
+    <mesh position={[...bar.position]} rotation={[0, bar.rotationY, 0]} castShadow receiveShadow>
       <boxGeometry args={[...bar.size]} />
       <meshStandardMaterial
         ref={matRef}

@@ -60,11 +60,6 @@ export const WATER_NORMAL_STRENGTH = 2.4
 export const IMPACT_STRENGTH = 0.22
 export const IMPACT_STRENGTH_HIT = 0.4
 
-/** 自動スライドモードでのバー列の振れ幅（X/Z）。池の中をゆっくり巡る。
- *  X はバー列が広いと池からはみ出すので控えめ、奥行 Z 方向を主に動かす。 */
-export const SLIDE_AMP_X = 0.6
-export const SLIDE_AMP_Z = 2.6
-
 /**
  * 鳴る音域のもと（ペンタトニック ＝ C メジャー系、C3〜E6 の 18 音）。
  * 音域スライダーは「この並びの高い方から何本ぶん使うか」を変える。
@@ -84,7 +79,7 @@ export const MAX_BARS = 17
 const SPACING_MAX = 0.72
 const MAX_SPAN = 8.8
 
-/** 雨を降らせる帯（前後位置と奥行）。横幅はバー列から動的に決める。 */
+/** 一列モードの雨の帯（前後位置と奥行）。横幅はバー列から動的に決める。 */
 export const RAIN_FOCUS_Z_CENTER = 0.4
 export const RAIN_FOCUS_Z_HALF = 1.7
 
@@ -95,35 +90,72 @@ export function levelToCount(level: number): number {
   return Math.round(MIN_BARS + (MAX_BARS - MIN_BARS) * clamp01(level))
 }
 
-/**
- * 指定本数のバー列を生成する。プールの高い方から count 本を取り（狭い音域＝高音側）、
- * 低音(左)→高音(右)に並べる。色は音階に沿った虹のグラデーション、低音ほど長い板。
- * 横幅は本数に応じて自動で詰める（多くても池に収まる）。
- */
-export function makeBars(count: number): BarDef[] {
-  const c = Math.max(MIN_BARS, Math.min(MAX_BARS, count))
-  const notes = PENTATONIC_POOL.slice(PENTATONIC_POOL.length - c)
+const BAR_BASE_Y = WATER_LEVEL + 0.09
+const hueOf = (frac: number) => Math.round(18 + 267 * frac)
+
+/** 一列レイアウト。低音(左)→高音(右)、低音ほど長い板。横幅は本数で自動。 */
+function makeRowBars(notes: readonly string[]): BarDef[] {
+  const c = notes.length
   const spacing = Math.min(SPACING_MAX, MAX_SPAN / Math.max(1, c - 1))
   const spread = spacing * (c - 1)
   return notes.map((note, i) => {
     const frac = c > 1 ? i / (c - 1) : 0
-    const x = -spread / 2 + spacing * i
-    const depth = 1.25 - 0.7 * frac
-    const hue = Math.round(18 + 267 * frac)
     return {
       id: i,
-      position: [x, WATER_LEVEL + 0.09, 0.4] as const,
-      size: [spacing * 0.82, 0.18, depth] as const,
+      position: [-spread / 2 + spacing * i, BAR_BASE_Y, 0.4] as const,
+      size: [spacing * 0.82, 0.18, 1.25 - 0.7 * frac] as const,
+      rotationY: 0,
       note,
-      color: `hsl(${hue}, 55%, 62%)`,
+      color: `hsl(${hueOf(frac)}, 55%, 62%)`,
     }
   })
 }
 
-/** バー列の横幅（先頭〜末尾の x 距離）。 */
-export function barsSpread(bars: readonly BarDef[]): number {
-  if (bars.length < 2) return 0
-  return bars[bars.length - 1].position[0] - bars[0].position[0]
+/**
+ * 円形レイアウト。バーを円周に放射状（長辺＝半径方向）に並べる。
+ * 密集して的が重なるので一列より当たりやすい＝音が鳴りやすい。
+ */
+function makeCircleBars(notes: readonly string[]): BarDef[] {
+  const c = notes.length
+  const radius = Math.max(1.4, Math.min(3.6, 0.16 * c))
+  const tangential = Math.min(0.55, ((2 * Math.PI * radius) / c) * 0.82)
+  return notes.map((note, i) => {
+    const frac = c > 1 ? i / (c - 1) : 0
+    const theta = (i / c) * Math.PI * 2
+    const depth = 1.1 - 0.5 * frac
+    return {
+      id: i,
+      position: [Math.sin(theta) * radius, BAR_BASE_Y, Math.cos(theta) * radius] as const,
+      size: [tangential, 0.18, depth] as const,
+      rotationY: theta,
+      note,
+      color: `hsl(${hueOf(frac)}, 55%, 62%)`,
+    }
+  })
+}
+
+/** 指定本数・配置のバーを生成する。プールの高い方から count 本（狭い音域＝高音側）。 */
+export function makeBars(count: number, shape: 'row' | 'circle' = 'row'): BarDef[] {
+  const c = Math.max(MIN_BARS, Math.min(MAX_BARS, count))
+  const notes = PENTATONIC_POOL.slice(PENTATONIC_POOL.length - c)
+  return shape === 'circle' ? makeCircleBars(notes) : makeRowBars(notes)
+}
+
+/** 一列モードでの雨を散らす横半幅（バー列の広がりから）。 */
+export function rowFocusXHalf(bars: readonly BarDef[]): number {
+  if (bars.length < 2) return 3.8
+  const spread = bars[bars.length - 1].position[0] - bars[0].position[0]
+  return Math.max(spread / 2 + 0.6, 3.8)
+}
+
+/** 円形モードでの雨を散らす円の半径（バー円＋余白）。 */
+export function circleFocusRadius(bars: readonly BarDef[]): number {
+  let maxR = 0
+  for (const b of bars) {
+    const r = Math.hypot(b.position[0], b.position[2])
+    if (r > maxR) maxR = r
+  }
+  return maxR + 0.9
 }
 
 /** ワールド座標 (x,z) を水面テクスチャの uv に変換する。 */
@@ -138,6 +170,8 @@ export type BarDef = {
   position: readonly [number, number, number]
   /** 寸法 [幅(X)=バー厚, 高さ(Y), 奥行(Z)=バー長] */
   size: readonly [number, number, number]
+  /** Y 軸まわりの回転（円形配置で半径方向を向かせる）。一列は 0。 */
+  rotationY: number
   /** 当たったときに鳴る音。 */
   note: string
   /** バーの基調色。 */

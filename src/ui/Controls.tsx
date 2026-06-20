@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { isMuted, setMuted } from '../audio/synth'
 import {
   settings,
-  setAutoSlide,
+  setBarShape,
   setFallSpeed,
   setRain,
   setRainOn,
@@ -11,14 +11,14 @@ import {
 import { levelToCount } from '../config'
 import { downloadScore } from '../score/downloadScore'
 
-/** 右下の小さな操作パネル。雨ON/OFF・雨量・音域・落下速度・自動スライド・楽譜DL・ミュート。 */
+/** 右下の小さな操作パネル。雨ON/OFF・雨量・音域・落下速度・配置・楽譜DL・ミュート。 */
 export function Controls() {
   const [mute, setMute] = useState(isMuted())
   const [rainOn, setRainOnState] = useState(settings.rainOn)
   const [rain, setRainState] = useState(settings.rain)
   const [range, setRangeState] = useState(settings.rangeLevel)
   const [fall, setFallState] = useState(settings.fallSpeed)
-  const [slide, setSlide] = useState(settings.autoSlide)
+  const [circle, setCircle] = useState(settings.barShape === 'circle')
   const [scoreMsg, setScoreMsg] = useState<string | null>(null)
 
   const handleScore = async () => {
@@ -94,14 +94,14 @@ export function Controls() {
       </label>
 
       <button
-        className={`control-toggle ${slide ? 'on' : ''}`}
+        className={`control-toggle ${circle ? 'on' : ''}`}
         onClick={() => {
-          const next = !slide
-          setAutoSlide(next)
-          setSlide(next)
+          const next = !circle
+          setBarShape(next ? 'circle' : 'row')
+          setCircle(next)
         }}
       >
-        {slide ? '◇ 自動スライド: ON' : '◇ 自動スライド: OFF'}
+        {circle ? '◎ 配置: 円形' : '▭ 配置: 一列'}
       </button>
 
       <button className="control-toggle" onClick={handleScore}>
