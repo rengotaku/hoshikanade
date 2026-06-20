@@ -9,8 +9,8 @@ help: ## このヘルプを表示
 		| sort \
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
-run: node_modules ## 開発サーバを起動（http://localhost:$(PORT)/）
-	$(NPM) run dev -- --port $(PORT)
+run: node_modules ## 開発サーバを起動（0.0.0.0 で外部公開・http://localhost:$(PORT)/）
+	$(NPM) run dev -- --host 0.0.0.0 --port $(PORT)
 
 dev: run ## run のエイリアス
 

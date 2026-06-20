@@ -8,6 +8,8 @@ export type DropProps = {
   id: number
   x: number
   z: number
+  /** 落下開始の高さ（既定は上空。曲演奏ではバーの少し上から）。 */
+  startY?: number
   /** 着地する高さ（水面、またはバー上ならバー天面）。 */
   landY: number
   geometry: BufferGeometry
@@ -20,7 +22,8 @@ export type DropProps = {
  * 落下中は速度に応じて縦に伸びた雫の形になる（モーションストレッチ）。
  * 位置・スケールは ref で直接更新し、毎フレームの React 再レンダリングを避ける。
  */
-export function Drop({ id, x, z, landY, geometry, material, onLand }: DropProps) {
+export function Drop({ id, x, z, startY, landY, geometry, material, onLand }: DropProps) {
+  const initialY = startY ?? DROP_START_Y
   const ref = useRef<Mesh>(null)
   const velocity = useRef(0)
   const landed = useRef(false)
@@ -45,6 +48,6 @@ export function Drop({ id, x, z, landY, geometry, material, onLand }: DropProps)
   })
 
   return (
-    <mesh ref={ref} position={[x, DROP_START_Y, z]} geometry={geometry} material={material} castShadow />
+    <mesh ref={ref} position={[x, initialY, z]} geometry={geometry} material={material} castShadow />
   )
 }

@@ -23,12 +23,13 @@ import {
 } from '../config'
 import { getLayoutSnapshot, settings, subscribeLayout } from '../state/settings'
 import { playNote } from '../audio/synth'
+import { SONGS, noteToMidi } from '../audio/songs'
 import type { WaterField } from '../water/waterField'
 import { Drop } from './Drop'
 import { Splash } from './Splash'
 import { XylophoneBar } from './XylophoneBar'
 
-type DropState = { id: number; x: number; z: number; landY: number }
+type DropState = { id: number; x: number; z: number; landY: number; startY?: number }
 type SplashState = { id: number; x: number; z: number; y: number }
 
 /** 雨量スライダー最大時の毎秒生成数。 */
@@ -61,6 +62,21 @@ function barIndexAt(bars: readonly BarDef[], x: number, z: number): number {
   return -1
 }
 
+/** 指定音に最も近い音のバー index（曲演奏で雨を落とす先）。 */
+function nearestBarIndex(bars: readonly BarDef[], note: string): number {
+  const target = noteToMidi(note)
+  let best = -1
+  let bestDist = Infinity
+  for (let i = 0; i < bars.length; i++) {
+    const d = Math.abs(noteToMidi(bars[i].note) - target)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  }
+  return best
+}
+
 /** 着地高さ。バー上ならバー天面、なければ水面。 */
 function landingYAt(bars: readonly BarDef[], x: number, z: number): number {
   const idx = barIndexAt(bars, x, z)
@@ -80,6 +96,12 @@ export function RainSystem({ field }: { field: WaterField }) {
   const nextId = useRef(0)
   const spawnTimer = useRef(0.1)
   const elapsedRef = useRef(0)
+  // 曲演奏の進行状態。
+  const songIdRef = useRef('')
+  const melodyIndex = useRef(0)
+  const melodyTimer = useRef(0)
+  // 曲演奏の雫が「正確に鳴らす音」を id ごとに保持（最寄りバーに落としつつ正音を発音）。
+  const noteOverrides = useRef(new Map<number, string>())
 
   // 音域＋配置 → バー列を動的生成（変更で板を作り直す）。
   const layout = useSyncExternalStore(subscribeLayout, getLayoutSnapshot, getLayoutSnapshot)
@@ -127,6 +149,40 @@ export function RainSystem({ field }: { field: WaterField }) {
   useFrame((state, delta) => {
     elapsedRef.current = state.clock.elapsedTime
 
+    // --- 曲演奏モード（曲が選ばれている間はランダム雨を止め、メロディを雨で奏でる） ---
+    const songId = settings.song
+    const song = songId ? SONGS[songId] : null
+    if (song) {
+      if (songIdRef.current !== songId) {
+        songIdRef.current = songId
+        melodyIndex.current = 0
+        melodyTimer.current = 0
+      }
+      melodyTimer.current -= delta
+      if (melodyTimer.current <= 0) {
+        const ev = song.notes[melodyIndex.current]
+        if (ev.note) {
+          const curBars = barsRef.current
+          const idx = nearestBarIndex(curBars, ev.note)
+          if (idx >= 0) {
+            const bar = curBars[idx]
+            const barTop = bar.position[1] + bar.size[1] / 2
+            const id = nextId.current++
+            noteOverrides.current.set(id, ev.note) // 最寄りバーに落としつつ正音を鳴らす
+            setDrops((prev) => [
+              ...prev,
+              { id, x: bar.position[0], z: bar.position[2], landY: barTop, startY: barTop + 1.0 },
+            ])
+          }
+        }
+        melodyTimer.current += ev.beats * song.tempo
+        melodyIndex.current = (melodyIndex.current + 1) % song.notes.length
+      }
+      return
+    }
+    songIdRef.current = ''
+
+    // --- ランダム雨モード ---
     spawnTimer.current -= delta
     if (spawnTimer.current <= 0) {
       const interval = nextInterval()
@@ -160,13 +216,17 @@ export function RainSystem({ field }: { field: WaterField }) {
     (id: number, x: number, z: number) => {
       setDrops((prev) => prev.filter((d) => d.id !== id))
 
+      // 曲演奏の雫は「正確な音」を持つ（最寄りバーへ落としつつこの音を鳴らす）。
+      const override = noteOverrides.current.get(id)
+      if (override !== undefined) noteOverrides.current.delete(id)
+
       const curBars = barsRef.current
       const barIdx = barIndexAt(curBars, x, z)
 
       if (barIdx >= 0) {
         const bar = curBars[barIdx]
         const barTop = bar.position[1] + bar.size[1] / 2
-        playNote(bar.note, x)
+        playNote(override ?? bar.note, x)
         hitRefsRef.current[barIdx].current = elapsedRef.current
 
         const splashId = nextId.current++
@@ -174,7 +234,11 @@ export function RainSystem({ field }: { field: WaterField }) {
         return
       }
 
-      // 水面に着水 → 水面シムへ波を注入（波紋は GPU シミュレーションが描く。着水音は無し）。
+      // バー外: 曲演奏の音だけは確実に鳴らす。それ以外は水面へ波を注入。
+      if (override !== undefined) {
+        playNote(override, x)
+        return
+      }
       const [u, v] = worldToUv(x, z)
       field.impacts.push({ u, v, strength: IMPACT_STRENGTH })
     },
@@ -197,6 +261,7 @@ export function RainSystem({ field }: { field: WaterField }) {
           id={d.id}
           x={d.x}
           z={d.z}
+          startY={d.startY}
           landY={d.landY}
           geometry={dropGeometry}
           material={dropMaterial}

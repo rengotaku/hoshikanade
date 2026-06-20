@@ -7,8 +7,10 @@ import {
   setRain,
   setRainOn,
   setRangeLevel,
+  setSong,
 } from '../state/settings'
 import { levelToCount } from '../config'
+import { SONG_LIST } from '../audio/songs'
 import { downloadScore } from '../score/downloadScore'
 
 /** 右下の小さな操作パネル。雨ON/OFF・雨量・音域・落下速度・配置・楽譜DL・ミュート。 */
@@ -19,6 +21,7 @@ export function Controls() {
   const [range, setRangeState] = useState(settings.rangeLevel)
   const [fall, setFallState] = useState(settings.fallSpeed)
   const [circle, setCircle] = useState(settings.barShape === 'circle')
+  const [song, setSongState] = useState(settings.song)
   const [scoreMsg, setScoreMsg] = useState<string | null>(null)
 
   const handleScore = async () => {
@@ -103,6 +106,25 @@ export function Controls() {
       >
         {circle ? '◎ 配置: 円形' : '▭ 配置: 一列'}
       </button>
+
+      <label className="control-row">
+        <span className="control-label">♬ 演奏する曲</span>
+        <select
+          className="control-select"
+          value={song}
+          onChange={(e) => {
+            setSong(e.target.value)
+            setSongState(e.target.value)
+          }}
+        >
+          <option value="">ランダム（生成）</option>
+          {SONG_LIST.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
 
       <button className="control-toggle" onClick={handleScore}>
         {scoreMsg ?? '♪ 楽譜をダウンロード'}

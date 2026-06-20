@@ -16,6 +16,12 @@ export const settings = {
   fallSpeed: 0.5,
   /** バーの配置（一列 / 円形）。 */
   barShape: 'row' as BarShape,
+  /** 演奏する曲の id（'' でランダム生成）。 */
+  song: '',
+}
+
+export function setSong(id: string): void {
+  settings.song = id
 }
 
 export function setRain(v: number): void {

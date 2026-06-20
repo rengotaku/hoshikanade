@@ -98,6 +98,17 @@ body {
   cursor: pointer;
 }
 
+.control-select {
+  width: 100%;
+  background: rgba(20, 38, 54, 0.6);
+  color: #e8f4ff;
+  border: 1px solid rgba(120, 170, 200, 0.3);
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.5rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
 .control-toggle {
   border: 1px solid rgba(120, 170, 200, 0.3);
   border-radius: 0.6rem;
