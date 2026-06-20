@@ -14,6 +14,8 @@ const PITCH_GUIDES = [
   { f: 0.94, label: '低音' },
 ]
 const PITCH_LINES = [0.2, 0.35, 0.65, 0.8]
+/** 横の目安（時間）の縦ガイド線。 */
+const TIME_LINES = [0.2, 0.4, 0.6, 0.8]
 
 /**
  * 画面全体をなぞってメロディの線を描く。横＝時間、縦＝音の高さ（上が高音）。
@@ -61,7 +63,10 @@ export function DrawOverlay({ onComplete, onCancel }: DrawOverlayProps) {
       <svg width="100%" height="100%">
         {/* 目安軸（縦＝音の高さ、横＝時間） */}
         {PITCH_LINES.map((f) => (
-          <line key={f} x1={0} y1={h * f} x2={w} y2={h * f} className="guide-line" />
+          <line key={`p${f}`} x1={0} y1={h * f} x2={w} y2={h * f} className="guide-line" />
+        ))}
+        {TIME_LINES.map((f) => (
+          <line key={`t${f}`} x1={w * f} y1={0} x2={w * f} y2={h} className="guide-line" />
         ))}
         {PITCH_GUIDES.map((g) => (
           <line key={g.f} x1={0} y1={h * g.f} x2={w} y2={h * g.f} className="guide-line-main" />
@@ -85,7 +90,7 @@ export function DrawOverlay({ onComplete, onCancel }: DrawOverlayProps) {
         />
       </svg>
       <div className="draw-hint">
-        左→右になぞって線を描く（横＝時間 / 上が高音・下が低音）。ゆっくり描くとゆるやかな曲に。
+        左→右に線を描く（横＝時間が進む / 縦＝音の高さ）。平らに描くと穏やか・短く描くと短い曲。
       </div>
       <button className="draw-cancel" onPointerDown={(e) => e.stopPropagation()} onClick={onCancel}>
         やめる

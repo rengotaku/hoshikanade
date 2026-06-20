@@ -1,51 +1,64 @@
 import type { SongNote } from '../audio/songs'
 import { poolNoteAt } from '../config'
 
-/** 描画点。t は時刻(ms)。描いた速度＝曲の速さになるよう時間で区切る。 */
+/** 描画点（画面座標）。 */
 export type Point = { x: number; y: number; t: number }
 
-/** 1 音あたりの基準時間（秒）。custom 曲のテンポもこれに合わせる。やや長めでゆるやかに。 */
-export const MELODY_STEP_SEC = 0.42
+/** 1 音あたりの再生時間（秒）＝テンポ。custom 曲のテンポもこれに合わせる。 */
+export const MELODY_STEP_SEC = 0.36
+/** 1 音あたりの横方向の目安ピクセル（横に長く描くほど音数が増える）。 */
+const PX_PER_NOTE = 56
 
-/** 時刻 t での線の縦位置 y を線形補間で求める。 */
-function yAtTime(points: Point[], t: number): number {
-  if (t <= points[0].t) return points[0].y
-  const last = points[points.length - 1]
-  if (t >= last.t) return last.y
+/** 横位置 x での線の縦位置 y（左→右の描線を想定。最初に x をまたぐ区間を線形補間）。 */
+function yAtX(points: Point[], x: number): number {
+  let nearestY = points[0].y
+  let nearestD = Infinity
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i]
     const b = points[i + 1]
-    if (t >= a.t && t <= b.t) {
-      const span = b.t - a.t
-      const f = span > 0 ? (t - a.t) / span : 0
+    const lo = Math.min(a.x, b.x)
+    const hi = Math.max(a.x, b.x)
+    if (x >= lo && x <= hi) {
+      const span = b.x - a.x
+      const f = Math.abs(span) > 1e-6 ? (x - a.x) / span : 0
       return a.y + (b.y - a.y) * f
     }
+    const da = Math.abs(a.x - x)
+    const db = Math.abs(b.x - x)
+    if (Math.min(da, db) < nearestD) {
+      nearestD = Math.min(da, db)
+      nearestY = da < db ? a.y : b.y
+    }
   }
-  return last.y
+  return nearestY
 }
 
 /**
- * なぞった線をメロディに変換する。
- * 描いた「時間」を MELODY_STEP_SEC ごとに区切り、その時刻の線の縦位置 → 音の高さにマップ。
- * → ゆっくり描けば音はまばらでゆるやか、速く描けば速い曲になる。
- * 上が高音・下が低音。ペンタトニックに量子化されるので外れた音にならない。
+ * なぞった線をメロディに変換する（ピアノロール方式）。
+ * 横位置＝時間（左→右）、縦位置＝音の高さ（上が高音）。
+ * 横に描いた幅を等間隔に区切り、各位置の高さ → 音にマップする。
+ * ペンタトニックに量子化されるので外れた音にならない。
  */
 export function pointsToMelody(points: Point[], height: number): SongNote[] {
   if (points.length < 2 || height <= 0) return []
-  const t0 = points[0].t
-  const tEnd = points[points.length - 1].t
-  const durSec = Math.max(0.4, (tEnd - t0) / 1000)
-  const count = Math.max(4, Math.min(96, Math.round(durSec / MELODY_STEP_SEC)))
+  let minX = Infinity
+  let maxX = -Infinity
+  for (const p of points) {
+    if (p.x < minX) minX = p.x
+    if (p.x > maxX) maxX = p.x
+  }
+  const width = Math.max(1, maxX - minX)
+  const count = Math.max(4, Math.min(96, Math.round(width / PX_PER_NOTE)))
+  const step = width / Math.max(1, count - 1)
 
-  const win = ((tEnd - t0) / Math.max(1, count - 1)) * 0.5 // 1 音ぶんの半分の時間窓
   const notes: SongNote[] = []
   for (let k = 0; k < count; k++) {
-    const t = t0 + ((tEnd - t0) * k) / Math.max(1, count - 1)
-    // 時間窓で平均してジッタを均し、なめらか＝ゆるやかな音運びにする。
+    const x = minX + step * k
+    // 横方向に少し平均してジッタを均す（なめらかな音運び）。
     let sy = 0
     let ns = 0
     for (let s = -2; s <= 2; s++) {
-      sy += yAtTime(points, t + (win * s) / 2)
+      sy += yAtX(points, x + (step * s) / 4)
       ns++
     }
     const frac = 1 - Math.max(0, Math.min(1, sy / ns / height)) // 上=高音
