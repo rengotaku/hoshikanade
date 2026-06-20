@@ -49,17 +49,21 @@ src/
     waterField.ts        シム状態の共有オブジェクト
     WaterSim.tsx         GPU 波動方程式（ping-pong FBO）
     WaterPlane.tsx       高さ場から変位・法線を作る水面マテリアル
+  state/settings.ts      実行時設定（雨量・自動スライド）
   scene/
     Scene.tsx            Canvas・カメラ・ライト・環境・月・後処理
     Effects.tsx          Bloom / 色調補正 / Vignette
-    RainSystem.tsx       雫生成・着地判定・波/発音の統括
-    Drop.tsx             1 滴の落下
-    Ripple.tsx           着水リング（加算合成）
+    RainSystem.tsx       雫生成・着地判定・水面への波注入・発音の統括
+    Drop.tsx             1 滴の落下（ガラス質の水玉）
+    Splash.tsx           バー命中時の飛沫
     XylophoneBar.tsx     鉄琴バー（発光）
   ui/
     StartOverlay.tsx     音解禁のための初回クリック
-    Controls.tsx         ミュート切り替え
+    Controls.tsx         雨量スライダー・自動スライド・ミュート
 ```
+
+波紋は手描きのリングではなく、水面シミュレーション（高さ場の波動方程式）が
+水面そのものを波立たせることで表現している。
 
 ## 既知の制約 / 今後
 

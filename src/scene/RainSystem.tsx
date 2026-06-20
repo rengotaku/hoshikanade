@@ -1,14 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useFrame } from '@react-three/fiber'
-import {
-  Color,
-  type Group,
-  MeshPhysicalMaterial,
-  NormalBlending,
-  PlaneGeometry,
-  ShaderMaterial,
-  SphereGeometry,
-} from 'three'
+import { type Group, MeshPhysicalMaterial, SphereGeometry } from 'three'
 import {
   BARS,
   IMPACT_STRENGTH,
@@ -22,19 +14,10 @@ import { settings } from '../state/settings'
 import { playNote, playWaterDrop } from '../audio/synth'
 import type { WaterField } from '../water/waterField'
 import { Drop } from './Drop'
-import { Ripple, type RippleVariant } from './Ripple'
-import { rippleFrag, rippleVert } from './rippleShader'
 import { Splash } from './Splash'
 import { XylophoneBar } from './XylophoneBar'
 
 type DropState = { id: number; x: number; z: number; landY: number }
-type RippleState = {
-  id: number
-  x: number
-  z: number
-  y: number
-  variant: RippleVariant
-}
 type SplashState = { id: number; x: number; z: number; y: number }
 
 /** 雨量スライダー最大時の毎秒生成数。 */
@@ -77,7 +60,6 @@ function landingYAt(localX: number, localZ: number): number {
  */
 export function RainSystem({ field }: { field: WaterField }) {
   const [drops, setDrops] = useState<DropState[]>([])
-  const [ripples, setRipples] = useState<RippleState[]>([])
   const [splashes, setSplashes] = useState<SplashState[]>([])
   const nextId = useRef(0)
   const spawnTimer = useRef(0.1)
@@ -105,32 +87,12 @@ export function RainSystem({ field }: { field: WaterField }) {
       }),
     [],
   )
-  const rippleGeometry = useMemo(() => new PlaneGeometry(1, 1), [])
-  const rippleMaterial = useMemo(
-    () =>
-      new ShaderMaterial({
-        vertexShader: rippleVert,
-        fragmentShader: rippleFrag,
-        transparent: true,
-        depthWrite: false,
-        blending: NormalBlending,
-        toneMapped: true,
-        uniforms: {
-          uColor: { value: new Color('#9ed3f2') },
-          uProgress: { value: 0 },
-          uStrength: { value: 0.7 },
-        },
-      }),
-    [],
-  )
   useEffect(() => {
     return () => {
       dropGeometry.dispose()
       dropMaterial.dispose()
-      rippleGeometry.dispose()
-      rippleMaterial.dispose()
     }
-  }, [dropGeometry, dropMaterial, rippleGeometry, rippleMaterial])
+  }, [dropGeometry, dropMaterial])
 
   useFrame((state, delta) => {
     const t = state.clock.elapsedTime
@@ -180,23 +142,16 @@ export function RainSystem({ field }: { field: WaterField }) {
 
         const splashId = nextId.current++
         setSplashes((prev) => [...prev, { id: splashId, x, z, y: barTop }])
-        const rippleId = nextId.current++
-        setRipples((prev) => [...prev, { id: rippleId, x, z, y: barTop, variant: 'hit' }])
         return
       }
 
+      // 水面に着水 → 着水音＋水面シムへ波を注入（波紋は GPU シミュレーションが描く）。
       playWaterDrop(x)
       const [u, v] = worldToUv(x, z)
       field.impacts.push({ u, v, strength: IMPACT_STRENGTH })
-      const rippleId = nextId.current++
-      setRipples((prev) => [...prev, { id: rippleId, x, z, y: WATER_LEVEL, variant: 'normal' }])
     },
     [field],
   )
-
-  const handleRippleDone = useCallback((id: number) => {
-    setRipples((prev) => prev.filter((r) => r.id !== id))
-  }, [])
 
   const handleSplashDone = useCallback((id: number) => {
     setSplashes((prev) => prev.filter((s) => s.id !== id))
@@ -233,20 +188,6 @@ export function RainSystem({ field }: { field: WaterField }) {
           geometry={dropGeometry}
           material={dropMaterial}
           onDone={handleSplashDone}
-        />
-      ))}
-
-      {ripples.map((r) => (
-        <Ripple
-          key={r.id}
-          id={r.id}
-          x={r.x}
-          z={r.z}
-          y={r.y}
-          variant={r.variant}
-          geometry={rippleGeometry}
-          material={rippleMaterial}
-          onDone={handleRippleDone}
         />
       ))}
     </group>
