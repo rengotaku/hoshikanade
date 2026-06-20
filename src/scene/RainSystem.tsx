@@ -122,10 +122,17 @@ export function RainSystem() {
   const hitRefsRef = useRef(hitRefs)
   hitRefsRef.current = hitRefs
 
-  // 宇宙なので「落ちる星」。小さく明るい光点（落下中は筋を引いて流星のように）。
-  const dropGeometry = useMemo(() => new SphereGeometry(0.05, 10, 10), [])
+  // 宇宙なので「落ちる星」。発光する明るい頭（加算合成）＋落下軸に伸びる光跡で流星に。
+  const dropGeometry = useMemo(() => new SphereGeometry(0.06, 10, 10), [])
   const dropMaterial = useMemo(
-    () => new MeshBasicMaterial({ color: '#eaf4ff', toneMapped: false }),
+    () =>
+      new MeshBasicMaterial({
+        color: '#eaf4ff',
+        toneMapped: false,
+        transparent: true,
+        blending: AdditiveBlending,
+        depthWrite: false,
+      }),
     [],
   )
   // 弾けた飛沫は淡く（半透明・加算でやわらかい光の粒に）。
