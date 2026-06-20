@@ -52,15 +52,34 @@ export const WATER_NORMAL_STRENGTH = 2.4
 export const IMPACT_STRENGTH = 0.28
 export const IMPACT_STRENGTH_HIT = 0.5
 
-/** 自動スライドモードでのバー列の振れ幅（X/Z）。池の中をゆっくり巡る。 */
-export const SLIDE_AMP_X = 1.8
+/** 自動スライドモードでのバー列の振れ幅（X/Z）。池の中をゆっくり巡る。
+ *  X はバー列が広いと池からはみ出すので控えめ、奥行 Z 方向を主に動かす。 */
+export const SLIDE_AMP_X = 0.6
 export const SLIDE_AMP_Z = 2.6
 
 /**
- * 雨を降らせる範囲（バー付近に集中させる）。バー列を覆う矩形＋少しの余白。
- * 自動スライド時はこの中心がバー列と一緒に動く。
+ * 鳴る音域（ペンタトニック ＝ C メジャー系）。
+ * ★音の幅を変えたいときはこの配列を編集するだけ★ 音を足す/減らすと、
+ * バーの本数・色・横位置・雨の範囲はすべて自動で調整される。
+ * どの順で当たっても不協和になりにくいペンタトニックなので、好きに広げてよい。
  */
-export const RAIN_FOCUS_X_HALF = 3.4
+export const BAR_NOTES = [
+  'C3', 'D3', 'E3', 'G3', 'A3',
+  'C4', 'D4', 'E4', 'G4', 'A4',
+  'C5', 'D5', 'E5',
+] as const
+
+const BAR_COUNT = BAR_NOTES.length
+/** バー 1 本ぶんの間隔。 */
+const BAR_SPACING = 0.7
+/** バー列の横幅（本数から自動計算）。 */
+export const BAR_SPREAD = (BAR_COUNT - 1) * BAR_SPACING
+
+/**
+ * 雨を降らせる範囲（バー付近に集中させる）。バー列を覆う矩形＋少しの余白。
+ * 横幅はバー列に合わせて自動。自動スライド時はこの中心がバー列と一緒に動く。
+ */
+export const RAIN_FOCUS_X_HALF = BAR_SPREAD / 2 + 0.5
 export const RAIN_FOCUS_Z_CENTER = 0.4
 export const RAIN_FOCUS_Z_HALF = 1.7
 
@@ -83,34 +102,22 @@ export type BarDef = {
 }
 
 /**
- * マリンバ風に横一列へ並べた鉄琴バー。低音ほど長く（奥行 Z 大）色も温かく、
- * 高音ほど短く明るい色にして視覚的にも音階が分かるようにする。
- * 水滴がランダムに落ちる中で、たまたまバーに当たると音が鳴る——という放置の楽しみ。
- *
- * 音はペンタトニック（C メジャー系）。どの順で当たっても不協和になりにくい。
+ * マリンバ風に横一列へ並べた鉄琴バー。低音(左)ほど長く（奥行 Z 大）暖色、
+ * 高音(右)ほど短く寒色〜紫にして、視覚的にも音階が分かるようにする。
+ * 本数・横位置・色は BAR_NOTES から自動生成されるので、音域を変えても手当て不要。
  */
-const BAR_NOTES = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5'] as const
-const BAR_COLORS = [
-  '#c98a6f',
-  '#c9a36f',
-  '#bfc96f',
-  '#6fc98a',
-  '#6fb3c9',
-  '#6f8ac9',
-  '#9f6fc9',
-] as const
-
 export const BARS: readonly BarDef[] = BAR_NOTES.map((note, i) => {
-  const count = BAR_NOTES.length
-  const spread = 5.6 // 並べる横幅
-  const x = -spread / 2 + (spread / (count - 1)) * i
+  const frac = BAR_COUNT > 1 ? i / (BAR_COUNT - 1) : 0
+  const x = -BAR_SPREAD / 2 + BAR_SPACING * i
   // 低音(左)ほど長く、高音(右)ほど短く。
-  const depth = 1.25 - (0.7 * i) / (count - 1)
+  const depth = 1.25 - 0.7 * frac
+  // 色相を暖色(低音)→寒色→紫(高音)へ。THREE.Color は hsl() 文字列を解釈できる。
+  const hue = Math.round(18 + 267 * frac)
   return {
     id: i,
     position: [x, WATER_LEVEL + 0.09, 0.4] as const,
-    size: [0.6, 0.18, depth] as const,
+    size: [BAR_SPACING * 0.82, 0.18, depth] as const,
     note,
-    color: BAR_COLORS[i],
+    color: `hsl(${hue}, 55%, 62%)`,
   }
 })
