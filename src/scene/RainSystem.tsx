@@ -14,7 +14,7 @@ import {
   worldToUv,
 } from '../config'
 import { settings } from '../state/settings'
-import { playNote, playWaterDrop } from '../audio/synth'
+import { playNote } from '../audio/synth'
 import type { WaterField } from '../water/waterField'
 import { Drop } from './Drop'
 import { Splash } from './Splash'
@@ -158,8 +158,7 @@ export function RainSystem({ field }: { field: WaterField }) {
         return
       }
 
-      // 水面に着水 → 着水音＋水面シムへ波を注入（波紋は GPU シミュレーションが描く）。
-      playWaterDrop(x)
+      // 水面に着水 → 水面シムへ波を注入（波紋は GPU シミュレーションが描く。着水音は無し）。
       const [u, v] = worldToUv(x, z)
       field.impacts.push({ u, v, strength: IMPACT_STRENGTH })
     },

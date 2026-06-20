@@ -27,7 +27,6 @@ let engine: Engine | null = null
 let started = false
 let muted = false
 let activeVoices = 0
-let activeDropVoices = 0
 
 async function loadTone(): Promise<ToneMod> {
   if (!Tone) Tone = await import('tone')
@@ -94,7 +93,8 @@ export async function startAudio(): Promise<void> {
 }
 
 /**
- * バーに着水したときに、そのバーの音を温かいマリンバで鳴らす。
+ * バーに着水したときに、そのバーの音を木琴（シロフォン）系の硬く明るい音で鳴らす。
+ * 木琴の特徴である基音＋12度（第3倍音）の響きと、短く打鍵的な減衰にしている。
  * x はシーン上の横位置（[-POND_HALF, POND_HALF]）で、左右の定位に使う。
  */
 export function playNote(note: string, x: number): void {
@@ -108,14 +108,16 @@ export function playNote(note: string, x: number): void {
   panVol.connect(engine.eq) // ドライ成分も少し
 
   const voice = new T.Synth({
-    oscillator: { partials: [1, 0, 2, 0, 3] }, // 木質の倍音（マリンバ）
-    envelope: { attack: 0.001, decay: 1.2, sustain: 0, release: 1.2 },
+    // 基音＋第3倍音(12度)＋第6倍音 ＝ 木琴の硬く乾いた響き。
+    oscillator: { partials: [1, 0, 0.7, 0, 0, 0.3] },
+    // 短い減衰で「コンッ」と鳴って素早く消える（木琴らしい打鍵感）。
+    envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.3 },
     volume: -6,
   }).connect(panVol)
-  voice.detune.value = (Math.random() * 2 - 1) * 6 // ±6 cent のゆらぎ
+  voice.detune.value = (Math.random() * 2 - 1) * 5 // ±5 cent のゆらぎ
 
-  const velocity = 0.5 + Math.random() * 0.4
-  voice.triggerAttackRelease(note, '2n', undefined, velocity)
+  const velocity = 0.55 + Math.random() * 0.4
+  voice.triggerAttackRelease(note, '8n', undefined, velocity)
 
   activeVoices += 1
   setTimeout(() => {
@@ -125,46 +127,7 @@ export function playNote(note: string, x: number): void {
     } finally {
       activeVoices -= 1 // dispose が失敗してもカウンタを必ず戻す
     }
-  }, 2600)
-}
-
-/**
- * 水面への着水音（リアルな「ポチャッ」）。
- * 水滴の気泡共鳴を模して、ピッチが素早く上がる正弦波＋速い減衰。
- * 滴ごとに基音と上昇量をゆらして、雨の粒立ちを出す。x で左右へ定位。
- */
-export function playWaterDrop(x: number): void {
-  if (!started || !Tone || !engine) return
-  if (activeDropVoices > 12) return // 多発するのでやや低めに上限
-  const T = Tone
-  const now = T.now()
-
-  const pan = Math.max(-1, Math.min(1, x / POND_HALF))
-  const panVol = new T.PanVol(pan, -15)
-  panVol.connect(engine.reverb)
-  panVol.connect(engine.eq)
-
-  const f0 = 520 + Math.random() * 440
-  const voice = new T.Synth({
-    oscillator: { type: 'sine' },
-    envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.04 },
-    volume: -8,
-  }).connect(panVol)
-
-  voice.triggerAttackRelease(f0, 0.11, now, 0.5 + Math.random() * 0.4)
-  // 着水直後にピッチが跳ね上がる ＝ 水滴特有の「ポチャ」
-  voice.frequency.setValueAtTime(f0, now)
-  voice.frequency.exponentialRampToValueAtTime(f0 * (1.8 + Math.random() * 0.8), now + 0.05)
-
-  activeDropVoices += 1
-  setTimeout(() => {
-    try {
-      voice.dispose()
-      panVol.dispose()
-    } finally {
-      activeDropVoices -= 1
-    }
-  }, 400)
+  }, 1200)
 }
 
 /** ミュート切り替え（クリックノイズを避けて短くランプ）。 */
