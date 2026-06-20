@@ -45,6 +45,23 @@ export function addLayer(notes: SongNote[], strokes?: NormPoint[][], tempo = DEF
   emit()
 }
 
+/** 再編集用：対象レイヤーの notes / strokes を差し替える（色・tempo・有効状態は維持）。 */
+export function updateLayer(
+  id: number,
+  patch: { notes?: SongNote[]; strokes?: NormPoint[][] },
+): void {
+  layers = layers.map((l) =>
+    l.id === id
+      ? {
+          ...l,
+          notes: patch.notes && patch.notes.length ? patch.notes : l.notes,
+          strokes: patch.strokes !== undefined ? patch.strokes : l.strokes,
+        }
+      : l,
+  )
+  emit()
+}
+
 export function setLayerTempo(id: number, tempo: number): void {
   const t = Math.max(0, Math.min(1, tempo))
   layers = layers.map((l) => (l.id === id ? { ...l, tempo: t } : l))

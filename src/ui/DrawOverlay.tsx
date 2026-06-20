@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Info } from 'lucide-react'
-import { pitchToY, type Point, type Stroke } from '../score/drawMelody'
-import type { Layer } from '../state/layers'
+import { Eraser, Info, Pencil } from 'lucide-react'
+import type { Point, Stroke } from '../score/drawMelody'
+import { layerLines } from '../score/layerLines'
+import type { Layer, NormPoint } from '../state/layers'
 
 export type DrawOverlayProps = {
   /** 「旋律完了」で全ストロークと画面サイズを渡す。 */
@@ -9,35 +10,8 @@ export type DrawOverlayProps = {
   onCancel: () => void
   /** すでにあるレイヤー（重ねがけ用に薄く表示）。 */
   priorLayers: Layer[]
-}
-
-/**
- * 既存レイヤーを薄く重ねる折れ線群。
- * 描いた軌跡(strokes)があれば「実際に描いた線」をそのまま再表示する。
- * 無い古いデータは音符列から再構成（等間隔・量子化で実物とは差が出る）。
- */
-function priorLines(layer: Layer, w: number, h: number): string[] {
-  if (layer.strokes && layer.strokes.length) {
-    return layer.strokes
-      .filter((s) => s.length >= 2)
-      .map((s) => s.map((p) => `${(p.x * w).toFixed(0)},${(p.y * h).toFixed(0)}`).join(' '))
-  }
-  const poly = layerPolyline(layer, w, h)
-  return poly ? [poly] : []
-}
-
-/** レイヤーの音符列を、薄く表示するための折れ線（横=順番, 縦=音高）に。和音は先頭音を代表に。 */
-function layerPolyline(layer: Layer, w: number, h: number): string {
-  const n = layer.notes.length
-  if (n < 2) return ''
-  const pts: string[] = []
-  for (let i = 0; i < n; i++) {
-    const note = layer.notes[i].notes[0]
-    if (!note) continue
-    const x = (i / (n - 1)) * w
-    pts.push(`${x.toFixed(0)},${pitchToY(note, h).toFixed(0)}`)
-  }
-  return pts.join(' ')
+  /** 再編集時の初期ストローク（正規化座標）。画面サイズへ戻して読み込む。 */
+  initialStrokes?: NormPoint[][]
 }
 
 /** 縦の目安（音の高さ）のガイド線。 */
@@ -48,23 +22,59 @@ const PITCH_GUIDES = [
 ]
 const PITCH_LINES = [0.2, 0.35, 0.65, 0.8]
 
+/** 消しゴムでストロークを消すと判定する距離（px）。指/ポインタの近傍。 */
+const ERASE_THRESHOLD = 18
+
+type Mode = 'pen' | 'eraser'
+
 const strokePath = (pts: Point[]): string => pts.map((p) => `${p.x},${p.y}`).join(' ')
+
+/** 点 p と線分 a-b の距離。 */
+function distToSegment(p: Point, a: Point, b: Point): number {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len2 = dx * dx + dy * dy
+  if (len2 < 1e-6) return Math.hypot(p.x - a.x, p.y - a.y)
+  let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t))
+}
+
+/** 点と折れ線の最短距離。 */
+function distToStroke(p: Point, stroke: Point[]): number {
+  let min = Infinity
+  for (let i = 0; i < stroke.length - 1; i++) {
+    const d = distToSegment(p, stroke[i], stroke[i + 1])
+    if (d < min) min = d
+  }
+  return min
+}
 
 /**
  * 画面全体に自由作画でメロディを描く。縦＝音の高さ（上が高音）。
- * 一筆書きではなく、複数本のストロークを自由に描き、「旋律完了」で確定する。
+ * 一筆書きではなく、複数本のストロークを自由に描き、「落書き完了」で確定する。
  * ・ストロークを別々に描く＝跳躍（連続音階に縛られない）／横に重ねて描く＝和音。
+ * ・ペン/消しゴムを切り替えられる。消しゴムは近傍のストロークを丸ごと消す。
  * ・点の取り込みは即時、表示は rAF でまとめて更新（長い線でも軽い）。
  */
-export function DrawOverlay({ onComplete, onCancel, priorLayers }: DrawOverlayProps) {
-  const [strokes, setStrokes] = useState<Stroke[]>([])
+export function DrawOverlay({ onComplete, onCancel, priorLayers, initialStrokes }: DrawOverlayProps) {
+  const size = useRef({ w: window.innerWidth, h: window.innerHeight })
+  // 再編集時：正規化ストロークを画面座標の Point[] に戻す（t は表示専用なので連番でよい）。
+  const initial = useRef<Stroke[]>(
+    (initialStrokes ?? [])
+      .filter((s) => s.length >= 2)
+      .map((s) => s.map((p, i) => ({ x: p.x * size.current.w, y: p.y * size.current.h, t: i }))),
+  )
+
+  const [strokes, setStrokes] = useState<Stroke[]>(initial.current)
   const [current, setCurrent] = useState<Point[]>([])
+  const [mode, setMode] = useState<Mode>('pen')
   const [infoOpen, setInfoOpen] = useState(false)
-  const strokesRef = useRef<Stroke[]>([])
+  const strokesRef = useRef<Stroke[]>(initial.current)
   const curRef = useRef<Point[]>([])
   const drawing = useRef(false)
+  const erasing = useRef(false)
   const raf = useRef(0)
-  const size = useRef({ w: window.innerWidth, h: window.innerHeight })
 
   useEffect(() => () => cancelAnimationFrame(raf.current), [])
 
@@ -76,18 +86,41 @@ export function DrawOverlay({ onComplete, onCancel, priorLayers }: DrawOverlayPr
     })
   }
 
+  /** 指定座標の近傍にあるストロークを消す。 */
+  const eraseAt = (x: number, y: number) => {
+    const p: Point = { x, y, t: 0 }
+    const next = strokesRef.current.filter((s) => distToStroke(p, s) > ERASE_THRESHOLD)
+    if (next.length !== strokesRef.current.length) {
+      strokesRef.current = next
+      setStrokes(next.slice())
+    }
+  }
+
   const start = (e: React.PointerEvent) => {
     e.currentTarget.setPointerCapture(e.pointerId)
+    if (mode === 'eraser') {
+      erasing.current = true
+      eraseAt(e.clientX, e.clientY)
+      return
+    }
     drawing.current = true
     curRef.current = [{ x: e.clientX, y: e.clientY, t: e.timeStamp }]
     scheduleRender()
   }
   const move = (e: React.PointerEvent) => {
+    if (mode === 'eraser') {
+      if (erasing.current) eraseAt(e.clientX, e.clientY)
+      return
+    }
     if (!drawing.current) return
     curRef.current.push({ x: e.clientX, y: e.clientY, t: e.timeStamp })
     scheduleRender()
   }
   const end = () => {
+    if (mode === 'eraser') {
+      erasing.current = false
+      return
+    }
     if (!drawing.current) return
     drawing.current = false
     if (curRef.current.length >= 2) {
@@ -110,7 +143,12 @@ export function DrawOverlay({ onComplete, onCancel, priorLayers }: DrawOverlayPr
   const hasStrokes = strokes.length > 0
 
   return (
-    <div className="draw-overlay" onPointerDown={start} onPointerMove={move} onPointerUp={end}>
+    <div
+      className={`draw-overlay ${mode === 'eraser' ? 'erase' : ''}`}
+      onPointerDown={start}
+      onPointerMove={move}
+      onPointerUp={end}
+    >
       <svg width="100%" height="100%">
         {/* 目安軸（縦＝音の高さ） */}
         {PITCH_LINES.map((f) => (
@@ -127,7 +165,7 @@ export function DrawOverlay({ onComplete, onCancel, priorLayers }: DrawOverlayPr
 
         {/* 重ねがけ用: 既存レイヤーを薄く表示（描いた軌跡があれば実物を再表示） */}
         {priorLayers.flatMap((l) =>
-          priorLines(l, w, h).map((pts, i) => (
+          layerLines(l, w, h).map((pts, i) => (
             <polyline
               key={`${l.id}-${i}`}
               points={pts}
@@ -176,9 +214,29 @@ export function DrawOverlay({ onComplete, onCancel, priorLayers }: DrawOverlayPr
       </button>
       {infoOpen && (
         <div className="draw-hint" onPointerDown={(e) => e.stopPropagation()}>
-          縦＝音の高さ（上が高音）。複数本を自由に描けます（別の線＝跳躍 / 横に重ねて描く＝和音）。描けたら「落書き完了」。
+          縦＝音の高さ（上が高音）。複数本を自由に描けます（別の線＝跳躍 / 横に重ねて描く＝和音）。消しゴムで近くの線を消せます。描けたら「落書き完了」。
         </div>
       )}
+
+      {/* ペン / 消しゴムの切替 */}
+      <div className="draw-tools" onPointerDown={(e) => e.stopPropagation()}>
+        <button
+          className={`draw-tool ${mode === 'pen' ? 'on' : ''}`}
+          onClick={() => setMode('pen')}
+          aria-label="ペン"
+          aria-pressed={mode === 'pen'}
+        >
+          <Pencil size={16} /> ペン
+        </button>
+        <button
+          className={`draw-tool ${mode === 'eraser' ? 'on' : ''}`}
+          onClick={() => setMode('eraser')}
+          aria-label="消しゴム"
+          aria-pressed={mode === 'eraser'}
+        >
+          <Eraser size={16} /> 消しゴム
+        </button>
+      </div>
 
       <div className="draw-actions" onPointerDown={(e) => e.stopPropagation()}>
         <button className="draw-cancel" onClick={onCancel}>

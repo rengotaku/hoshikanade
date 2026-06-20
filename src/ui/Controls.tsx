@@ -7,7 +7,6 @@ import {
   setRain,
   setRainOn,
   setRangeLevel,
-  setTempo,
   setVolume,
 } from '../state/settings'
 import {
@@ -18,6 +17,7 @@ import {
   setLayers,
   subscribeLayers,
   toggleLayer,
+  updateLayer,
 } from '../state/layers'
 import { levelToCount, notesForLevel } from '../config'
 import { downloadScore } from '../score/downloadScore'
@@ -28,7 +28,7 @@ import {
   CircleDot,
   Download,
   FileMusic,
-  Hourglass,
+  LayoutGrid,
   Music,
   Pencil,
   Rows3,
@@ -41,6 +41,7 @@ import {
   X,
 } from 'lucide-react'
 import { DrawOverlay } from './DrawOverlay'
+import { OverviewOverlay } from './OverviewOverlay'
 
 const ICON = 16
 
@@ -52,9 +53,10 @@ export function Controls() {
   const [range, setRangeState] = useState(settings.rangeLevel)
   const [fall, setFallState] = useState(settings.fallSpeed)
   const [volume, setVolumeUi] = useState(settings.volume)
-  const [tempo, setTempoUi] = useState(settings.tempo)
   const [circle, setCircle] = useState(settings.barShape === 'circle')
   const [drawing, setDrawing] = useState(false)
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [overviewOpen, setOverviewOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [scoreMsg, setScoreMsg] = useState<string | null>(null)
@@ -73,15 +75,34 @@ export function Controls() {
     setTimeout(() => setScoreMsg(null), 2000)
   }
 
-  const handleDrawComplete = (strokes: Stroke[], size: { w: number; h: number }) => {
+  const startEdit = (id: number) => {
+    setOverviewOpen(false)
+    setEditingId(id)
+    setDrawing(true)
+  }
+
+  const closeDraw = () => {
     setDrawing(false)
+    setEditingId(null)
+  }
+
+  const handleDrawComplete = (strokes: Stroke[], size: { w: number; h: number }) => {
     const melody = strokesToMelody(strokes, size.h, notesForLevel(settings.rangeLevel))
-    if (!melody.length) return
+    if (!melody.length) {
+      closeDraw()
+      return
+    }
     // 再表示で実物の線を見せるため、描いた軌跡を正規化座標で保存する。
     const norm = strokes
       .map((s) => s.map((p) => ({ x: p.x / size.w, y: p.y / size.h })))
       .filter((s) => s.length >= 2)
-    addLayer(melody, norm) // 個別テンポは中立(0.5)。全体の速さは「時の流れ」(マスター)で効く
+    if (editingId !== null) {
+      // 再編集：notes を作り直し、軌跡も差し替える。色・個別テンポ・有効状態は維持。
+      updateLayer(editingId, { notes: melody, strokes: norm })
+    } else {
+      addLayer(melody, norm) // 個別テンポは中立(0.5)。全体の速さは「時の流れ」(マスター)で効く
+    }
+    closeDraw()
   }
 
   const handleImport = async (file: File) => {
@@ -98,8 +119,19 @@ export function Controls() {
       {drawing && (
         <DrawOverlay
           onComplete={handleDrawComplete}
-          onCancel={() => setDrawing(false)}
-          priorLayers={layers}
+          onCancel={closeDraw}
+          priorLayers={editingId !== null ? layers.filter((l) => l.id !== editingId) : layers}
+          initialStrokes={
+            editingId !== null ? layers.find((l) => l.id === editingId)?.strokes : undefined
+          }
+        />
+      )}
+
+      {overviewOpen && (
+        <OverviewOverlay
+          layers={layers}
+          onClose={() => setOverviewOpen(false)}
+          onEdit={startEdit}
         />
       )}
 
@@ -116,7 +148,7 @@ export function Controls() {
       />
 
       {/* ===== 右: なぞって作曲メニュー ===== */}
-      {!drawing && !composeOpen && (
+      {!drawing && !overviewOpen && !composeOpen && (
         <button
           className="controls-fab"
           onClick={() => setComposeOpen(true)}
@@ -125,7 +157,7 @@ export function Controls() {
           <Pencil size={ICON} />
         </button>
       )}
-      {!drawing && composeOpen && (
+      {!drawing && !overviewOpen && composeOpen && (
         <div className="controls">
           <button className="controls-close" onClick={() => setComposeOpen(false)} aria-label="閉じる">
             <X size={ICON} />
@@ -142,6 +174,9 @@ export function Controls() {
                   <div className="layer-head">
                     <span className="layer-dot" style={{ background: l.color }} />
                     <span className="layer-name">落書き {i + 1}</span>
+                    <button className="layer-btn" onClick={() => startEdit(l.id)} aria-label="編集">
+                      <Pencil size={15} />
+                    </button>
                     <button className="layer-btn" onClick={() => toggleLayer(l.id)} aria-label="有効/無効">
                       {l.enabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
                     </button>
@@ -149,9 +184,9 @@ export function Controls() {
                       <Trash2 size={15} />
                     </button>
                   </div>
-                  <label className="layer-tempo" title="この落書きの時の流れ">
+                  <label className="layer-tempo" title="この落書きの落下速度">
                     <span className="layer-tempo-icon">
-                      <Hourglass size={14} />
+                      <ArrowDownToLine size={14} />
                     </span>
                     <input
                       type="range"
@@ -167,6 +202,14 @@ export function Controls() {
             </div>
           )}
 
+          <button
+            className="control-toggle"
+            disabled={!layers.length}
+            onClick={() => setOverviewOpen(true)}
+          >
+            <LayoutGrid size={ICON} /> すべての落書きを見る
+          </button>
+
           <div className="control-iorow">
             <button className="control-mini" disabled={!layers.length} onClick={() => exportComposition(getLayers())}>
               <Download size={14} /> エクスポート
@@ -179,7 +222,7 @@ export function Controls() {
       )}
 
       {/* ===== 左: 星と場の設定メニュー ===== */}
-      {!drawing && !settingsOpen && (
+      {!drawing && !overviewOpen && !settingsOpen && (
         <button
           className="controls-fab left"
           onClick={() => setSettingsOpen(true)}
@@ -188,7 +231,7 @@ export function Controls() {
           <Settings size={ICON} />
         </button>
       )}
-      {!drawing && settingsOpen && (
+      {!drawing && !overviewOpen && settingsOpen && (
         <div className="controls left">
           <button className="controls-close" onClick={() => setSettingsOpen(false)} aria-label="閉じる">
             <X size={ICON} />
@@ -249,22 +292,6 @@ export function Controls() {
                 const v = Number(e.target.value)
                 setFallSpeed(v)
                 setFallState(v)
-              }}
-            />
-          </label>
-
-          <label className="control-row">
-            <span className="control-label"><Hourglass size={14} /> 時の流れ</span>
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.01}
-              value={tempo}
-              onChange={(e) => {
-                const v = Number(e.target.value)
-                setTempo(v)
-                setTempoUi(v)
               }}
             />
           </label>
