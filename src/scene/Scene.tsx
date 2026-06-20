@@ -1,9 +1,10 @@
 import { Canvas } from '@react-three/fiber'
 import { Environment, Lightformer, OrbitControls, Sparkles } from '@react-three/drei'
 import { ACESFilmicToneMapping } from 'three'
-import { POND_HALF } from '../config'
 import { isMobile, quality } from '../util/quality'
 import { RainSystem } from './RainSystem'
+import { ShootingStars } from './ShootingStars'
+import { Celestial } from './Celestial'
 import { Effects } from './Effects'
 
 /**
@@ -24,18 +25,8 @@ export function Scene() {
       <fog attach="fog" args={['#0a131d', 13, 30]} />
 
       <ambientLight intensity={0.35} />
-      <directionalLight
-        position={[5, 9, 4]}
-        intensity={1.1}
-        castShadow={quality.shadows}
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-        shadow-bias={-0.0004}
-        shadow-camera-left={-POND_HALF}
-        shadow-camera-right={POND_HALF}
-        shadow-camera-top={POND_HALF}
-        shadow-camera-bottom={-POND_HALF}
-      />
+      {/* 音板を中心に周回する太陽と月＋追従するディレクショナルライト。 */}
+      <Celestial />
 
       {/* オフラインでも効く環境マップ。金属の水面/バーへ柔らかな映り込みを与える。 */}
       <Environment resolution={256}>
@@ -47,24 +38,21 @@ export function Scene() {
         <Lightformer intensity={0.5} position={[5, 2, 2]} scale={[3, 3, 1]} color="#ffe39a" />
       </Environment>
 
-      {/* 空高くに浮かぶ月（Bloom で柔らかく光る）。 */}
-      <mesh position={[7, 13, -14]}>
-        <sphereGeometry args={[0.82, 32, 32]} />
-        <meshBasicMaterial color="#eaf3ff" toneMapped={false} />
-      </mesh>
-
       <RainSystem />
 
-      {/* 水面の上に漂う微かな霧の粒子。premium な空気感を足す。 */}
+      {/* 画面全体に漂う光の粒子。視界を大きく覆う体積に広げる。 */}
       <Sparkles
         count={quality.sparkles}
-        scale={[POND_HALF * 2, 3.5, POND_HALF * 2]}
-        position={[0, 1.4, 0]}
-        size={2.4}
+        scale={[42, 30, 42]}
+        position={[0, 8, -2]}
+        size={2.6}
         speed={0.25}
-        opacity={0.45}
+        opacity={0.5}
         color="#bfe9ff"
       />
+
+      {/* ランダムなタイミングで流れる流れ星。 */}
+      <ShootingStars />
 
       <OrbitControls
         enablePan={false}

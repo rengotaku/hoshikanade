@@ -19,8 +19,8 @@ export const quality = {
   simRes: isMobile ? 128 : 256,
   /** 水面メッシュの分割数。 */
   waterSegments: isMobile ? 96 : 200,
-  /** 霧の粒子数。 */
-  sparkles: isMobile ? 24 : 60,
+  /** 光の粒子数（画面全体を覆うので多め）。 */
+  sparkles: isMobile ? 180 : 460,
   /** 影を落とすか（影は重いのでスマホは無効）。 */
   shadows: !isMobile,
   /** 後処理のマルチサンプリング。 */
