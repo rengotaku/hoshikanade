@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { useFrame } from '@react-three/fiber'
 import { type Group, MeshPhysicalMaterial, SphereGeometry } from 'three'
 import {
-  BARS,
+  type BarDef,
+  barsSpread,
   IMPACT_STRENGTH,
+  levelToCount,
+  makeBars,
   POND_HALF,
-  RAIN_FOCUS_X_HALF,
   RAIN_FOCUS_Z_CENTER,
   RAIN_FOCUS_Z_HALF,
   SLIDE_AMP_X,
@@ -13,7 +22,7 @@ import {
   WATER_LEVEL,
   worldToUv,
 } from '../config'
-import { settings } from '../state/settings'
+import { getRangeLevel, settings, subscribeRangeLevel } from '../state/settings'
 import { playNote } from '../audio/synth'
 import type { WaterField } from '../water/waterField'
 import { Drop } from './Drop'
@@ -38,10 +47,10 @@ function nextInterval(): number {
 }
 
 /** (localX, localZ)（バー基準のローカル座標）が当たるバーの index を返す。なければ -1。 */
-function barIndexAt(localX: number, localZ: number): number {
-  for (let i = 0; i < BARS.length; i++) {
-    const [bx, , bz] = BARS[i].position
-    const [sx, , sz] = BARS[i].size
+function barIndexAt(bars: readonly BarDef[], localX: number, localZ: number): number {
+  for (let i = 0; i < bars.length; i++) {
+    const [bx, , bz] = bars[i].position
+    const [sx, , sz] = bars[i].size
     if (Math.abs(localX - bx) <= sx / 2 && Math.abs(localZ - bz) <= sz / 2) {
       return i
     }
@@ -50,17 +59,17 @@ function barIndexAt(localX: number, localZ: number): number {
 }
 
 /** ローカル座標での着地高さ。バー上ならバー天面、なければ水面。 */
-function landingYAt(localX: number, localZ: number): number {
-  const idx = barIndexAt(localX, localZ)
+function landingYAt(bars: readonly BarDef[], localX: number, localZ: number): number {
+  const idx = barIndexAt(bars, localX, localZ)
   if (idx < 0) return WATER_LEVEL
-  const bar = BARS[idx]
+  const bar = bars[idx]
   return bar.position[1] + bar.size[1] / 2
 }
 
 /**
  * 放置系の中核。雨量（スライダー）に応じて水滴を生成し、着水で波紋＋着水音を生む。
- * 鉄琴バーに当たれば発音＋発光＋飛沫。自動スライドモードではバー列がゆっくり動き、
- * 当たる滴が移り変わって音楽が変化する。
+ * 鉄琴バーに当たれば発音＋発光＋飛沫。音域スライダーでバー本数（音域の幅）が変わり、
+ * 自動スライドモードではバー列がゆっくり動いて当たる滴が移り変わる。
  */
 export function RainSystem({ field }: { field: WaterField }) {
   const [drops, setDrops] = useState<DropState[]>([])
@@ -68,10 +77,23 @@ export function RainSystem({ field }: { field: WaterField }) {
   const nextId = useRef(0)
   const spawnTimer = useRef(0.1)
   const elapsedRef = useRef(0)
-  const hitRefs = useRef(BARS.map(() => ({ current: -999 })))
   const barGroup = useRef<Group>(null)
-  // バー列の現在のスライドオフセット（自動スライドモードで更新）。
   const slide = useRef({ x: 0, z: 0 })
+
+  // 音域スライダー → バー列を動的生成（変更で板を作り直す）。
+  const rangeLevel = useSyncExternalStore(subscribeRangeLevel, getRangeLevel, getRangeLevel)
+  const bars = useMemo(() => makeBars(levelToCount(rangeLevel)), [rangeLevel])
+  const hitRefs = useMemo(() => bars.map(() => ({ current: -999 })), [bars])
+  // 雨を散らす横幅。狭い音域でも一点集中して水面シムが飽和しないよう下限を設ける。
+  const focusXHalf = useMemo(() => Math.max(barsSpread(bars) / 2 + 0.6, 3.8), [bars])
+
+  // 毎フレーム/コールバックから最新値を読むための参照。
+  const barsRef = useRef(bars)
+  barsRef.current = bars
+  const hitRefsRef = useRef(hitRefs)
+  hitRefsRef.current = hitRefs
+  const focusRef = useRef(focusXHalf)
+  focusRef.current = focusXHalf
 
   const dropGeometry = useMemo(() => new SphereGeometry(0.06, 16, 16), [])
   const dropMaterial = useMemo(
@@ -122,18 +144,15 @@ export function RainSystem({ field }: { field: WaterField }) {
         spawnTimer.current = 0.3 // 雨が止んでいる間は時々再チェック
       } else {
         spawnTimer.current = interval
-        // 雨はバー付近に集中（自動スライド時は中心がバー列に追従）。
-        const x = clamp(
-          slide.current.x + randRange(-RAIN_FOCUS_X_HALF, RAIN_FOCUS_X_HALF),
-          -POND_EDGE,
-          POND_EDGE,
-        )
+        // 雨はバー付近に集中（横幅は音域＝バー列に追従、自動スライドで中心も移動）。
+        const fx = focusRef.current
+        const x = clamp(slide.current.x + randRange(-fx, fx), -POND_EDGE, POND_EDGE)
         const z = clamp(
           slide.current.z + RAIN_FOCUS_Z_CENTER + randRange(-RAIN_FOCUS_Z_HALF, RAIN_FOCUS_Z_HALF),
           -POND_EDGE,
           POND_EDGE,
         )
-        const landY = landingYAt(x - slide.current.x, z - slide.current.z)
+        const landY = landingYAt(barsRef.current, x - slide.current.x, z - slide.current.z)
         setDrops((prev) => [...prev, { id: nextId.current++, x, z, landY }])
       }
     }
@@ -145,13 +164,14 @@ export function RainSystem({ field }: { field: WaterField }) {
 
       const localX = x - slide.current.x
       const localZ = z - slide.current.z
-      const barIdx = barIndexAt(localX, localZ)
+      const curBars = barsRef.current
+      const barIdx = barIndexAt(curBars, localX, localZ)
 
       if (barIdx >= 0) {
-        const bar = BARS[barIdx]
+        const bar = curBars[barIdx]
         const barTop = bar.position[1] + bar.size[1] / 2
         playNote(bar.note, x)
-        hitRefs.current[barIdx].current = elapsedRef.current
+        hitRefsRef.current[barIdx].current = elapsedRef.current
 
         const splashId = nextId.current++
         setSplashes((prev) => [...prev, { id: splashId, x, z, y: barTop }])
@@ -172,8 +192,8 @@ export function RainSystem({ field }: { field: WaterField }) {
   return (
     <group>
       <group ref={barGroup}>
-        {BARS.map((bar) => (
-          <XylophoneBar key={bar.id} bar={bar} lastHitRef={hitRefs.current[bar.id]} />
+        {bars.map((bar) => (
+          <XylophoneBar key={bar.id} bar={bar} lastHitRef={hitRefs[bar.id]} />
         ))}
       </group>
 

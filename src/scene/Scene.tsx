@@ -44,8 +44,8 @@ export function Scene() {
       {/* オフラインでも効く環境マップ。金属の水面/バーへ柔らかな映り込みを与える。 */}
       <Environment resolution={256}>
         <color attach="background" args={['#0a131d']} />
-        {/* 月明かり: 水面に映り込む明るい光源。さざ波がこの反射を砕いてきらめく。 */}
-        <Lightformer form="circle" intensity={3.2} position={[2, 7, -6]} scale={[3.5, 3.5, 1]} color="#e6f1ff" />
+        {/* 月明かり: 水面をうっすら照らす光源。 */}
+        <Lightformer form="circle" intensity={2.0} position={[2, 7, -6]} scale={[3.5, 3.5, 1]} color="#e6f1ff" />
         <Lightformer intensity={1.2} position={[0, 4, -3]} scale={[10, 4, 1]} color="#2f5e8f" />
         <Lightformer intensity={0.6} position={[-5, 2, 2]} scale={[3, 3, 1]} color="#9fd8ff" />
         <Lightformer intensity={0.5} position={[5, 2, 2]} scale={[3, 3, 1]} color="#ffe39a" />

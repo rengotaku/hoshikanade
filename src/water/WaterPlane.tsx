@@ -37,10 +37,12 @@ export function WaterPlane({ field }: { field: WaterField }) {
 
   const material = useMemo(() => {
     const mat = new MeshStandardMaterial({
-      color: new Color('#0e2f47'),
-      roughness: 0.05,
-      metalness: 0.7,
-      envMapIntensity: 1.5,
+      // 鏡面反射を抑えたソフトな水面（飽和して白飛びしないように）。
+      // さざ波は変位＋ライトの陰影で見せる。
+      color: new Color('#102f45'),
+      roughness: 0.32,
+      metalness: 0.25,
+      envMapIntensity: 0.5,
       side: DoubleSide,
       transparent: true,
       opacity: 0.95,

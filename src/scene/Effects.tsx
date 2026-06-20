@@ -16,8 +16,8 @@ export function Effects() {
   return (
     <EffectComposer multisampling={4}>
       <Bloom
-        intensity={0.55}
-        luminanceThreshold={0.62}
+        intensity={0.45}
+        luminanceThreshold={0.72}
         luminanceSmoothing={0.9}
         kernelSize={KernelSize.LARGE}
         mipmapBlur

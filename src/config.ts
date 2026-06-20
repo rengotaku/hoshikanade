@@ -45,12 +45,12 @@ export const WAVE_DAMPING = 0.994
 /** 高さ → 頂点変位のスケール（ワールド単位）。 */
 export const WATER_DISP_SCALE = 0.2
 
-/** 高さ勾配 → 法線の強さ（映り込みの歪み量）。波が光を拾うよう強めに。 */
-export const WATER_NORMAL_STRENGTH = 2.4
+/** 高さ勾配 → 法線の強さ（映り込みの歪み量）。強すぎると飽和時に眩しく白飛びするので控えめ。 */
+export const WATER_NORMAL_STRENGTH = 1.55
 
-/** 着水時に水面へ与える波の強さ（通常／バー命中）。雨が密なので 1 滴は控えめに。 */
-export const IMPACT_STRENGTH = 0.28
-export const IMPACT_STRENGTH_HIT = 0.5
+/** 着水時に水面へ与える波の強さ（通常／バー命中）。雨が密＆集中しても飽和しないよう控えめ。 */
+export const IMPACT_STRENGTH = 0.22
+export const IMPACT_STRENGTH_HIT = 0.4
 
 /** 自動スライドモードでのバー列の振れ幅（X/Z）。池の中をゆっくり巡る。
  *  X はバー列が広いと池からはみ出すので控えめ、奥行 Z 方向を主に動かす。 */
@@ -58,30 +58,65 @@ export const SLIDE_AMP_X = 0.6
 export const SLIDE_AMP_Z = 2.6
 
 /**
- * 鳴る音域（ペンタトニック ＝ C メジャー系）。
- * ★音の幅を変えたいときはこの配列を編集するだけ★ 音を足す/減らすと、
- * バーの本数・色・横位置・雨の範囲はすべて自動で調整される。
- * どの順で当たっても不協和になりにくいペンタトニックなので、好きに広げてよい。
+ * 鳴る音域のもと（ペンタトニック ＝ C メジャー系、C3〜E6 の 18 音）。
+ * 音域スライダーは「この並びの高い方から何本ぶん使うか」を変える。
+ * どの順で当たっても不協和になりにくいので、狭くても広くても気持ちよく鳴る。
  */
-export const BAR_NOTES = [
+const PENTATONIC_POOL = [
+  'C3', 'D3', 'E3', 'G3', 'A3',
   'C4', 'D4', 'E4', 'G4', 'A4',
   'C5', 'D5', 'E5', 'G5', 'A5',
   'C6', 'D6', 'E6',
 ] as const
 
-const BAR_COUNT = BAR_NOTES.length
-/** バー 1 本ぶんの間隔。 */
-const BAR_SPACING = 0.7
-/** バー列の横幅（本数から自動計算）。 */
-export const BAR_SPREAD = (BAR_COUNT - 1) * BAR_SPACING
+/** 音域スライダーで取りうるバー本数の範囲。 */
+export const MIN_BARS = 6
+export const MAX_BARS = 17
+/** バー間隔の最大、および列の最大横幅（池に収める）。 */
+const SPACING_MAX = 0.72
+const MAX_SPAN = 8.8
 
-/**
- * 雨を降らせる範囲（バー付近に集中させる）。バー列を覆う矩形＋少しの余白。
- * 横幅はバー列に合わせて自動。自動スライド時はこの中心がバー列と一緒に動く。
- */
-export const RAIN_FOCUS_X_HALF = BAR_SPREAD / 2 + 0.5
+/** 雨を降らせる帯（前後位置と奥行）。横幅はバー列から動的に決める。 */
 export const RAIN_FOCUS_Z_CENTER = 0.4
 export const RAIN_FOCUS_Z_HALF = 1.7
+
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
+
+/** スライダー値 0..1 → バー本数（MIN_BARS〜MAX_BARS）。 */
+export function levelToCount(level: number): number {
+  return Math.round(MIN_BARS + (MAX_BARS - MIN_BARS) * clamp01(level))
+}
+
+/**
+ * 指定本数のバー列を生成する。プールの高い方から count 本を取り（狭い音域＝高音側）、
+ * 低音(左)→高音(右)に並べる。色は音階に沿った虹のグラデーション、低音ほど長い板。
+ * 横幅は本数に応じて自動で詰める（多くても池に収まる）。
+ */
+export function makeBars(count: number): BarDef[] {
+  const c = Math.max(MIN_BARS, Math.min(MAX_BARS, count))
+  const notes = PENTATONIC_POOL.slice(PENTATONIC_POOL.length - c)
+  const spacing = Math.min(SPACING_MAX, MAX_SPAN / Math.max(1, c - 1))
+  const spread = spacing * (c - 1)
+  return notes.map((note, i) => {
+    const frac = c > 1 ? i / (c - 1) : 0
+    const x = -spread / 2 + spacing * i
+    const depth = 1.25 - 0.7 * frac
+    const hue = Math.round(18 + 267 * frac)
+    return {
+      id: i,
+      position: [x, WATER_LEVEL + 0.09, 0.4] as const,
+      size: [spacing * 0.82, 0.18, depth] as const,
+      note,
+      color: `hsl(${hue}, 55%, 62%)`,
+    }
+  })
+}
+
+/** バー列の横幅（先頭〜末尾の x 距離）。 */
+export function barsSpread(bars: readonly BarDef[]): number {
+  if (bars.length < 2) return 0
+  return bars[bars.length - 1].position[0] - bars[0].position[0]
+}
 
 /** ワールド座標 (x,z) を水面テクスチャの uv に変換する。 */
 export function worldToUv(x: number, z: number): [number, number] {
@@ -100,24 +135,3 @@ export type BarDef = {
   /** バーの基調色。 */
   color: string
 }
-
-/**
- * マリンバ風に横一列へ並べた鉄琴バー。低音(左)ほど長く（奥行 Z 大）暖色、
- * 高音(右)ほど短く寒色〜紫にして、視覚的にも音階が分かるようにする。
- * 本数・横位置・色は BAR_NOTES から自動生成されるので、音域を変えても手当て不要。
- */
-export const BARS: readonly BarDef[] = BAR_NOTES.map((note, i) => {
-  const frac = BAR_COUNT > 1 ? i / (BAR_COUNT - 1) : 0
-  const x = -BAR_SPREAD / 2 + BAR_SPACING * i
-  // 低音(左)ほど長く、高音(右)ほど短く。
-  const depth = 1.25 - 0.7 * frac
-  // 色相を暖色(低音)→寒色→紫(高音)へ。THREE.Color は hsl() 文字列を解釈できる。
-  const hue = Math.round(18 + 267 * frac)
-  return {
-    id: i,
-    position: [x, WATER_LEVEL + 0.09, 0.4] as const,
-    size: [BAR_SPACING * 0.82, 0.18, depth] as const,
-    note,
-    color: `hsl(${hue}, 55%, 62%)`,
-  }
-})
