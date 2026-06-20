@@ -51,6 +51,8 @@ export function XylophoneBar({ bar, lastHitRef }: XylophoneBarProps) {
         clearcoat={0.6}
         clearcoatRoughness={0.35}
         envMapIntensity={0.6}
+        transparent
+        opacity={0.55}
       />
     </RoundedBox>
   )
