@@ -28,7 +28,6 @@ import {
   CircleDot,
   Download,
   FileMusic,
-  Hourglass,
   LayoutGrid,
   Music,
   Pencil,
@@ -185,9 +184,9 @@ export function Controls() {
                       <Trash2 size={15} />
                     </button>
                   </div>
-                  <label className="layer-tempo" title="この落書きの時の流れ">
+                  <label className="layer-tempo" title="この落書きの落下速度">
                     <span className="layer-tempo-icon">
-                      <Hourglass size={14} />
+                      <ArrowDownToLine size={14} />
                     </span>
                     <input
                       type="range"
