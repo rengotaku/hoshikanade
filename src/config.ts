@@ -23,12 +23,12 @@ export function levelToGravity(level: number): number {
   return MIN_GRAVITY + (MAX_GRAVITY - MIN_GRAVITY) * clamp01(level)
 }
 
-/** 水滴生成間隔のゆらぎ（秒）。min〜max の一様乱数で次の滴までの間隔を決める。
- *  しっかり雨が降っていて、バーにも頻繁に当たって音が鳴るくらいの密度。 */
+/** 星の生成間隔のゆらぎ（秒）。min〜max の一様乱数で次の星までの間隔を決める。
+ *  しっかり星が降っていて、バーにも頻繁に当たって音が鳴るくらいの密度。 */
 export const SPAWN_INTERVAL_MIN = 0.04
 export const SPAWN_INTERVAL_MAX = 0.16
 
-/** 1 回の生成で同時に落とす滴の数（ゆらぎを持たせて雨らしく）。 */
+/** 1 回の生成で同時に落とす星の数（ゆらぎを持たせて降るように）。 */
 export const SPAWN_BURST_MAX = 2
 
 /** 波紋の寿命（秒）と最大半径。 */
@@ -56,7 +56,7 @@ export const WATER_DISP_SCALE = 0.2
 /** 高さ勾配 → 法線の強さ。拡散水面なので強めにしてもOK（陰影でさざ波がはっきり出る）。 */
 export const WATER_NORMAL_STRENGTH = 2.4
 
-/** 着水時に水面へ与える波の強さ（通常／バー命中）。雨が密＆集中しても飽和しないよう控えめ。 */
+/** 着地時に波紋へ与える波の強さ（通常／バー命中）。星が密＆集中しても飽和しないよう控えめ。 */
 export const IMPACT_STRENGTH = 0.22
 export const IMPACT_STRENGTH_HIT = 0.4
 
@@ -88,7 +88,7 @@ export const MAX_BARS = 17
 const SPACING_MAX = 0.72
 const MAX_SPAN = 8.8
 
-/** 一列モードの雨の帯（前後位置と奥行）。横幅はバー列から動的に決める。 */
+/** 一列モードで星が降る帯（前後位置と奥行）。横幅はバー列から動的に決める。 */
 export const RAIN_FOCUS_Z_CENTER = 0.4
 export const RAIN_FOCUS_Z_HALF = 1.7
 
@@ -97,6 +97,21 @@ const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
 /** スライダー値 0..1 → バー本数（MIN_BARS〜MAX_BARS）。 */
 export function levelToCount(level: number): number {
   return Math.round(MIN_BARS + (MAX_BARS - MIN_BARS) * clamp01(level))
+}
+
+/**
+ * 音域スライダー値に対応する「今出ているバーの音名（低→高）」。
+ * 描画の縦軸はこの並びにマップする（＝描いた位置と鳴る音・見えるバーが一致）。
+ */
+export function notesForLevel(level: number): readonly string[] {
+  return PENTATONIC_POOL.slice(PENTATONIC_POOL.length - levelToCount(level))
+}
+
+/** 0(低)〜1(高) の比率から、指定プールの音名を返す。 */
+export function poolNoteAtIn(pool: readonly string[], frac: number): string {
+  if (!pool.length) return 'C4'
+  const f = Math.max(0, Math.min(1, frac))
+  return pool[Math.round(f * (pool.length - 1))]
 }
 
 const BAR_BASE_Y = WATER_LEVEL + 0.09
@@ -152,14 +167,14 @@ export function makeBars(count: number, shape: 'row' | 'circle' = 'row'): BarDef
   return shape === 'circle' ? makeCircleBars(notes) : makeRowBars(notes)
 }
 
-/** 一列モードでの雨を散らす横半幅（バー列の広がりから）。 */
+/** 一列モードで星を散らす横半幅（バー列の広がりから）。 */
 export function rowFocusXHalf(bars: readonly BarDef[]): number {
   if (bars.length < 2) return 3.8
   const spread = bars[bars.length - 1].position[0] - bars[0].position[0]
   return Math.max(spread / 2 + 0.6, 3.8)
 }
 
-/** 円形モードでの雨を散らす円の半径（バー円＋余白）。 */
+/** 円形モードで星を散らす円の半径（バー円＋余白）。 */
 export function circleFocusRadius(bars: readonly BarDef[]): number {
   let maxR = 0
   for (const b of bars) {

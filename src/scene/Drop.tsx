@@ -18,8 +18,8 @@ export type DropProps = {
 }
 
 /**
- * 1 滴の水滴。重力で落下し、着地面（水面 or バー天面）に着いたら onLand を 1 度だけ呼ぶ。
- * 落下中は速度に応じて縦に伸びた雫の形になる（モーションストレッチ）。
+ * 落ちる星 1 つ。重力で落下し、着地面（波紋面 or バー天面）に着いたら onLand を 1 度だけ呼ぶ。
+ * 落下中は速度に応じて縦に伸びた軌跡の形になる（モーションストレッチ）。
  * 位置・スケールは ref で直接更新し、毎フレームの React 再レンダリングを避ける。
  */
 export function Drop({ id, x, z, startY, landY, geometry, material, onLand }: DropProps) {
@@ -32,11 +32,11 @@ export function Drop({ id, x, z, startY, landY, geometry, material, onLand }: Dr
     const mesh = ref.current
     if (!mesh || landed.current) return
 
-    // 落下速度スライダーに応じた重力（飛行中の雫もリアルタイムに反映）。
+    // 落下速度スライダーに応じた重力（落下中の星もリアルタイムに反映）。
     velocity.current += levelToGravity(settings.fallSpeed) * delta
     mesh.position.y -= velocity.current * delta
 
-    // 落下中の雨は円ではなく細い縦筋に。速いほど細長く、遅いほど丸く。
+    // 落下中の星は円ではなく細い縦筋（軌跡）に。速いほど細長く、遅いほど丸く。
     const stretch = Math.min(6.5, 1 + velocity.current * 0.18)
     const thin = Math.min(1, 0.7 / Math.sqrt(stretch))
     mesh.scale.set(thin, stretch, thin)

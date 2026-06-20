@@ -1,7 +1,8 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { AdditiveBlending, type DirectionalLight, type Group, type Mesh } from 'three'
+import { AdditiveBlending, DoubleSide, type DirectionalLight, type Group, type Mesh } from 'three'
 import { POND_HALF } from '../config'
+import { settings } from '../state/settings'
 import { quality } from '../util/quality'
 
 /**
@@ -10,6 +11,10 @@ import { quality } from '../util/quality'
  * 太陽が高いほど明るい（昼夜のうつろい）。
  */
 const ORBIT_SPEED = 0.06
+/** 落下速度 0..1 → 天体の流れる速さの倍率（0.5 で等倍。遅くすると空もゆっくり）。 */
+function fallToSkyRate(v: number): number {
+  return 0.2 + Math.max(0, Math.min(1, v)) * 1.6 // v=0:×0.2 / 0.5:×1 / 1:×1.8
+}
 const SUN_R = 14
 const MOON_R = 9
 const TILT = 0.5
@@ -21,13 +26,17 @@ type Planet = {
   color: string
   tilt: number
   phase: number
+  /** 環（土星）。色は環の色。 */
+  ring?: string
+  /** 自転の傾き表現用のメッシュ傾き。 */
+  axis?: number
 }
 const PLANETS: Planet[] = [
-  { r: 5.5, speed: 0.45, size: 0.28, color: '#c98a6f', tilt: 0.25, phase: 0.0 },
-  { r: 7.2, speed: 0.34, size: 0.42, color: '#6fa8c9', tilt: 0.55, phase: 1.3 },
-  { r: 9.4, speed: 0.25, size: 0.62, color: '#c9b07f', tilt: 0.4, phase: 2.6 },
-  { r: 11.5, speed: 0.18, size: 0.4, color: '#9f8ad8', tilt: 0.7, phase: 4.1 },
-  { r: 13.5, speed: 0.13, size: 0.55, color: '#7fc9a0', tilt: 0.32, phase: 5.4 },
+  { r: 5.5, speed: 0.45, size: 0.26, color: '#b8794f', tilt: 0.25, phase: 0.0, axis: 0.1 },
+  { r: 7.2, speed: 0.34, size: 0.46, color: '#4f8fc9', tilt: 0.55, phase: 1.3, axis: 0.4 },
+  { r: 9.4, speed: 0.25, size: 0.66, color: '#e0c98a', tilt: 0.4, phase: 2.6, ring: '#e6d6a8', axis: 0.47 },
+  { r: 11.5, speed: 0.18, size: 0.38, color: '#9f7fd8', tilt: 0.7, phase: 4.1, axis: 0.9 },
+  { r: 13.5, speed: 0.13, size: 0.52, color: '#5fb890', tilt: 0.32, phase: 5.4, axis: 0.2 },
 ]
 
 // 音板（原点＝地球の位置）を中心に周回する。
@@ -39,12 +48,15 @@ export function Celestial() {
   const sun = useRef<Group>(null)
   const moon = useRef<Mesh>(null)
   const light = useRef<DirectionalLight>(null)
-  const planetRefs = useRef<(Mesh | null)[]>([])
+  const planetRefs = useRef<(Group | null)[]>([])
+  // 天体の「流れた時間」を累積する。落下速度に応じてフレームごとに進める速さを変える。
+  const skyTime = useRef(0)
 
   const t0 = useMemo(() => PLANETS.map((p) => p.phase), [])
 
-  useFrame((state) => {
-    const time = state.clock.elapsedTime
+  useFrame((_, delta) => {
+    skyTime.current += delta * fallToSkyRate(settings.fallSpeed)
+    const time = skyTime.current
     const a = time * ORBIT_SPEED
 
     const [sx, sy, sz] = orbit(SUN_R, a, TILT)
@@ -111,17 +123,33 @@ export function Celestial() {
         <meshStandardMaterial color="#cfd8e6" emissive="#3a4a66" emissiveIntensity={0.4} roughness={1} />
       </mesh>
 
-      {/* 惑星 */}
+      {/* 惑星（土星は環つき。各惑星は色・自転傾き・環で見分けがつく） */}
       {PLANETS.map((p, i) => (
-        <mesh
+        <group
           key={i}
           ref={(el) => {
             planetRefs.current[i] = el
           }}
+          rotation={[p.axis ?? 0, 0, 0]}
         >
-          <sphereGeometry args={[p.size, 24, 24]} />
-          <meshStandardMaterial color={p.color} roughness={0.8} metalness={0.1} />
-        </mesh>
+          <mesh>
+            <sphereGeometry args={[p.size, 24, 24]} />
+            <meshStandardMaterial color={p.color} roughness={0.85} metalness={0.1} />
+          </mesh>
+          {p.ring && (
+            <mesh rotation={[Math.PI / 2, 0, 0]}>
+              <ringGeometry args={[p.size * 1.45, p.size * 2.3, 56]} />
+              <meshBasicMaterial
+                color={p.ring}
+                side={DoubleSide}
+                transparent
+                opacity={0.6}
+                toneMapped={false}
+                depthWrite={false}
+              />
+            </mesh>
+          )}
+        </group>
       ))}
     </>
   )

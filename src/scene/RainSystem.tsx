@@ -23,7 +23,7 @@ import { getLayoutSnapshot, settings, subscribeLayout } from '../state/settings'
 import { getLayers } from '../state/layers'
 import { playNote } from '../audio/synth'
 import { noteToMidi } from '../audio/songs'
-import { MELODY_STEP_SEC } from '../score/drawMelody'
+import { noteSec } from '../score/drawMelody'
 import { Drop } from './Drop'
 import { Splash } from './Splash'
 import { XylophoneBar } from './XylophoneBar'
@@ -31,14 +31,14 @@ import { XylophoneBar } from './XylophoneBar'
 type DropState = { id: number; x: number; z: number; landY: number; startY?: number }
 type SplashState = { id: number; x: number; z: number; y: number }
 
-/** 雨量スライダー最大時の毎秒生成数。 */
+/** 星の量スライダー最大時の毎秒生成数。 */
 const MAX_RATE = 22
 
 const randRange = (min: number, max: number) => min + Math.random() * (max - min)
 const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v))
 const POND_EDGE = POND_HALF * 0.97
 
-/** 現在の雨量から次の滴までの間隔（秒）。停止中/雨量0なら Infinity。 */
+/** 現在の星の量から次の星までの間隔（秒）。停止中/星の量0なら Infinity。 */
 function nextInterval(): number {
   if (!settings.rainOn) return Infinity
   const rate = settings.rain * MAX_RATE
@@ -61,7 +61,7 @@ function barIndexAt(bars: readonly BarDef[], x: number, z: number): number {
   return -1
 }
 
-/** 指定音に最も近い音のバー index（曲演奏で雨を落とす先）。 */
+/** 指定音に最も近い音のバー index（曲演奏で星を落とす先）。 */
 function nearestBarIndex(bars: readonly BarDef[], note: string): number {
   const target = noteToMidi(note)
   let best = -1
@@ -76,7 +76,7 @@ function nearestBarIndex(bars: readonly BarDef[], note: string): number {
   return best
 }
 
-/** 着地高さ。バー上ならバー天面、なければ水面。 */
+/** 着地高さ。バー上ならバー天面、なければ着地面。 */
 function landingYAt(bars: readonly BarDef[], x: number, z: number): number {
   const idx = barIndexAt(bars, x, z)
   if (idx < 0) return WATER_LEVEL
@@ -85,7 +85,7 @@ function landingYAt(bars: readonly BarDef[], x: number, z: number): number {
 }
 
 /**
- * 放置系の中核。雨量に応じて水滴を生成し、着水で水面へ波を注入、
+ * 放置系の中核。星の量に応じて落ちる星を生成し、着地で波紋へ波を注入、
  * バー命中で発音＋発光＋飛沫。音域スライダーで本数（音域の幅）、
  * 配置トグルで一列／円形が変わる（円形は的が密集して当たりやすい＝賑やか）。
  */
@@ -97,7 +97,7 @@ export function RainSystem() {
   const elapsedRef = useRef(0)
   // レイヤーごとの再生状態（index と次の音までの残り時間）。
   const layerState = useRef(new Map<number, { index: number; timer: number }>())
-  // 曲演奏の雫が「正確に鳴らす音」を id ごとに保持（最寄りバーに落としつつ正音を発音）。
+  // 曲演奏の星が「正確に鳴らす音」を id ごとに保持（最寄りバーに落としつつ正音を発音）。
   const noteOverrides = useRef(new Map<number, string>())
 
   // 音域＋配置 → バー列を動的生成（変更で板を作り直す）。
@@ -109,7 +109,7 @@ export function RainSystem() {
   )
   const hitRefs = useMemo(() => bars.map(() => ({ current: -999 })), [bars])
 
-  // 雨を散らす範囲（配置で異なる）。
+  // 星を散らす範囲（配置で異なる）。
   const isCircle = useMemo(() => settings.barShape === 'circle', [layout])
   const focusX = useMemo(() => rowFocusXHalf(bars), [bars])
   const circleR = useMemo(() => circleFocusRadius(bars), [bars])
@@ -147,7 +147,7 @@ export function RainSystem() {
     }
   }, [dropGeometry, dropMaterial, splashMaterial])
 
-  // 1 音を「最寄りのバーへ落とす雫」として出す（正音はサンプラーで鳴らす）。
+  // 1 音を「最寄りのバーへ落とす星」として出す（正音はサンプラーで鳴らす）。
   const spawnMelodyDrop = (note: string) => {
     const curBars = barsRef.current
     const idx = nearestBarIndex(curBars, note)
@@ -179,8 +179,8 @@ export function RainSystem() {
       st.timer -= delta
       if (st.timer <= 0) {
         const ev = layer.notes[st.index % layer.notes.length]
-        if (ev.note) spawnMelodyDrop(ev.note)
-        st.timer += ev.beats * MELODY_STEP_SEC
+        for (const n of ev.notes) spawnMelodyDrop(n) // 1 ステップに複数音なら和音として同時発音
+        st.timer += ev.beats * noteSec(layer.tempo, settings.tempo) // 旋律ごと×全体の時の流れ（描画とは別軸）
         st.index = (st.index + 1) % layer.notes.length
       }
     }
@@ -189,12 +189,12 @@ export function RainSystem() {
       if (!activeIds.has(id)) layerState.current.delete(id)
     }
 
-    // --- ランダム雨（アンビエント。雨量/停止トグルで制御。レイヤーと同時に流れる） ---
+    // --- ランダムに降る星（アンビエント。星の量/停止トグルで制御。レイヤーと同時に流れる） ---
     spawnTimer.current -= delta
     if (spawnTimer.current <= 0) {
       const interval = nextInterval()
       if (!isFinite(interval)) {
-        spawnTimer.current = 0.3 // 停止/雨量0 の間は時々再チェック
+        spawnTimer.current = 0.3 // 停止/星の量0 の間は時々再チェック
       } else {
         spawnTimer.current = interval
         let x: number
@@ -223,7 +223,7 @@ export function RainSystem() {
     (id: number, x: number, z: number) => {
       setDrops((prev) => prev.filter((d) => d.id !== id))
 
-      // 曲演奏の雫は「正確な音」を持つ（最寄りバーへ落としつつこの音を鳴らす）。
+      // 曲演奏の星は「正確な音」を持つ（最寄りバーへ落としつつこの音を鳴らす）。
       const override = noteOverrides.current.get(id)
       if (override !== undefined) noteOverrides.current.delete(id)
 
@@ -241,7 +241,7 @@ export function RainSystem() {
         return
       }
 
-      // バー外: 曲演奏の音だけは確実に鳴らす。それ以外（外れた雨）は静かに消える。
+      // バー外: 曲演奏の音だけは確実に鳴らす。それ以外（外れた星）は静かに消える。
       if (override !== undefined) {
         playNote(override, x)
       }

@@ -1,4 +1,5 @@
 import { POND_HALF } from '../config'
+import { settings } from '../state/settings'
 import { recordNote } from './recorder'
 
 /**
@@ -14,7 +15,16 @@ import { recordNote } from './recorder'
  * Tone.js は重いので動的 import で遅延読み込みし、初回描画を軽くする（映像はクリック前から動く）。
  */
 
-const TARGET_DB = -10
+/** 音量スライダー 0..1 をマスター出力の dB へ。0.8 ≒ -10dB（従来値）、1.0 で -4dB、0 付近で無音。 */
+function volumeToDb(v: number): number {
+  if (v <= 0.02) return -Infinity
+  return -34 + v * 30
+}
+
+/** ミュート/音量を踏まえた現在の目標 dB。 */
+function targetDb(): number {
+  return muted ? -Infinity : volumeToDb(settings.volume)
+}
 
 /** 木琴サンプル（nbrosowsky/tonejs-instruments）。 */
 const XYLO_BASE_URL = 'https://nbrosowsky.github.io/tonejs-instruments/samples/xylophone/'
@@ -119,7 +129,7 @@ export async function startAudio(): Promise<void> {
   T.getDestination().volume.value = -Infinity
   T.getTransport().start()
   started = true
-  T.getDestination().volume.rampTo(TARGET_DB, 3) // ゆるやかにフェードイン
+  T.getDestination().volume.rampTo(targetDb(), 3) // ゆるやかにフェードイン
 }
 
 /**
@@ -172,11 +182,17 @@ export function playNote(note: string, x: number): void {
 export function setMuted(next: boolean): void {
   muted = next
   if (!started || !Tone) return
-  Tone.getDestination().volume.rampTo(next ? -Infinity : TARGET_DB, 0.15)
+  Tone.getDestination().volume.rampTo(targetDb(), 0.15)
 }
 
 export function isMuted(): boolean {
   return muted
+}
+
+/** マスター音量を反映（settings.volume を更新した後に呼ぶ）。ミュート中は無音のまま。 */
+export function applyVolume(): void {
+  if (!started || !Tone) return
+  Tone.getDestination().volume.rampTo(targetDb(), 0.12)
 }
 
 /** タブ非表示時に CPU/バッテリーを節約しつつ音を止める。 */
@@ -191,5 +207,5 @@ export async function resumeAudio(): Promise<void> {
   if (!started || !Tone) return
   await Tone.start()
   Tone.getTransport().start()
-  Tone.getDestination().volume.rampTo(muted ? -Infinity : TARGET_DB, 0.4)
+  Tone.getDestination().volume.rampTo(targetDb(), 0.4)
 }
