@@ -84,9 +84,9 @@ export function poolNoteAt(frac: number): string {
 /** 音域スライダーで取りうるバー本数の範囲。 */
 export const MIN_BARS = 6
 export const MAX_BARS = 17
-/** バー間隔の最大、および列の最大横幅（池に収める）。 */
-const SPACING_MAX = 0.72
-const MAX_SPAN = 8.8
+/** バー間隔の最大、および列の最大横幅。一列は広めに取り、音ごとの間を空けて強弱を付けやすく。 */
+const SPACING_MAX = 1.05
+const MAX_SPAN = 13.5
 
 /** 一列モードで星が降る帯（前後位置と奥行）。横幅はバー列から動的に決める。 */
 export const RAIN_FOCUS_Z_CENTER = 0.4
@@ -121,12 +121,13 @@ const BAR_THICK_MIN = 0.34
 const BAR_THICK_MAX = 0.92
 
 /**
- * 板ごとの厚み。隣どうしで高さが食い違う「段差」を出す（低→高に整列する階段にはしない）。
- * index から決まる擬似ランダムな 5 段で、ゴツゴツした起伏になるよう散らす。
+ * 板ごとの厚み（段差）は音高ベース。低音ほど厚く（高く）、高音ほど薄く（低く）する。
+ * 奥行きのテーパー（低音ほど長い）と揃い、木琴らしいくさび形の段差になる。
+ * frac: 0=最低音 … 1=最高音。
  */
-function barThickness(i: number): number {
-  const step = ((i * 7) % 5) / 4 // 0, 0.5, 1, 0.25, 0.75 … と段差が散らばる
-  return BAR_THICK_MIN + step * (BAR_THICK_MAX - BAR_THICK_MIN)
+function barThickness(frac: number): number {
+  const f = Math.max(0, Math.min(1, frac))
+  return BAR_THICK_MAX - f * (BAR_THICK_MAX - BAR_THICK_MIN)
 }
 
 /** 厚みのある板を水面に planted（底を水面に合わせる）したときの中心 Y。 */
@@ -141,8 +142,8 @@ function makeRowBars(notes: readonly string[]): BarDef[] {
   const spread = spacing * (c - 1)
   return notes.map((note, i) => {
     const frac = c > 1 ? i / (c - 1) : 0
-    const thick = barThickness(i)
-    // 板は長め（奥行 Z）。低音ほど長い。厚みは段差で起伏（底は水面に揃える）。
+    const thick = barThickness(frac)
+    // 板は長め（奥行 Z）。低音ほど長い。厚みは音高ベースの段差（底は水面に揃える）。
     return {
       id: i,
       position: [-spread / 2 + spacing * i, barCenterY(thick), 0.1] as const,
@@ -167,7 +168,7 @@ function makeCircleBars(notes: readonly string[]): BarDef[] {
   return notes.map((note, i) => {
     const frac = c > 1 ? i / (c - 1) : 0
     const theta = (i / c) * Math.PI * 2
-    const thick = barThickness(i)
+    const thick = barThickness(frac)
     return {
       id: i,
       position: [Math.sin(theta) * radius, barCenterY(thick), Math.cos(theta) * radius] as const,
