@@ -33,9 +33,9 @@ export function Drop({ id, x, z, landY, geometry, material, onLand }: DropProps)
     velocity.current += levelToGravity(settings.fallSpeed) * delta
     mesh.position.y -= velocity.current * delta
 
-    // 落下中の雨は円ではなく縦に伸びた筋になる。速いほど細長く、遅いほど丸く。
-    const stretch = Math.min(5, 1 + velocity.current * 0.14)
-    const thin = Math.min(1, 0.85 / Math.sqrt(stretch))
+    // 落下中の雨は円ではなく細い縦筋に。速いほど細長く、遅いほど丸く。
+    const stretch = Math.min(6.5, 1 + velocity.current * 0.18)
+    const thin = Math.min(1, 0.7 / Math.sqrt(stretch))
     mesh.scale.set(thin, stretch, thin)
 
     if (mesh.position.y <= landY) {

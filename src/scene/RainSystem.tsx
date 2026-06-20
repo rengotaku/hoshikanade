@@ -95,7 +95,8 @@ export function RainSystem({ field }: { field: WaterField }) {
   const focusRef = useRef(focusXHalf)
   focusRef.current = focusXHalf
 
-  const dropGeometry = useMemo(() => new SphereGeometry(0.065, 18, 18), [])
+  // 雨粒は小さく（ベストプラクティス: 細く小さい半透明の筋）。
+  const dropGeometry = useMemo(() => new SphereGeometry(0.024, 10, 10), [])
   const dropMaterial = useMemo(
     () =>
       new MeshPhysicalMaterial({
