@@ -13,7 +13,7 @@ export type SplashProps = {
   onDone: (id: number) => void
 }
 
-const PARTICLES = 7
+const PARTICLES = 5
 const LIFETIME = 0.65
 
 type Particle = {
@@ -39,15 +39,15 @@ export function Splash({ id, x, z, y, geometry, material, onDone }: SplashProps)
   const particles = useMemo<Particle[]>(() => {
     return Array.from({ length: PARTICLES }, () => {
       const angle = Math.random() * Math.PI * 2
-      const speed = 0.8 + Math.random() * 1.8
+      const speed = 0.5 + Math.random() * 1.0 // ひかえめに広がる
       return {
         vx: Math.cos(angle) * speed,
         vz: Math.sin(angle) * speed,
-        vy: 1.6 + Math.random() * 2.4,
+        vy: 1.0 + Math.random() * 1.6,
         px: x,
         py: y,
         pz: z,
-        size: 0.35 + Math.random() * 0.5,
+        size: 0.22 + Math.random() * 0.3, // 小さめ＝淡い
       }
     })
   }, [x, y, z])

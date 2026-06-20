@@ -7,7 +7,7 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { MeshBasicMaterial, SphereGeometry } from 'three'
+import { AdditiveBlending, MeshBasicMaterial, SphereGeometry } from 'three'
 import {
   type BarDef,
   circleFocusRadius,
@@ -126,12 +126,26 @@ export function RainSystem() {
     () => new MeshBasicMaterial({ color: '#eaf4ff', toneMapped: false }),
     [],
   )
+  // 弾けた飛沫は淡く（半透明・加算でやわらかい光の粒に）。
+  const splashMaterial = useMemo(
+    () =>
+      new MeshBasicMaterial({
+        color: '#aed8f0',
+        transparent: true,
+        opacity: 0.4,
+        blending: AdditiveBlending,
+        depthWrite: false,
+        toneMapped: false,
+      }),
+    [],
+  )
   useEffect(() => {
     return () => {
       dropGeometry.dispose()
       dropMaterial.dispose()
+      splashMaterial.dispose()
     }
-  }, [dropGeometry, dropMaterial])
+  }, [dropGeometry, dropMaterial, splashMaterial])
 
   // 1 音を「最寄りのバーへ落とす雫」として出す（正音はサンプラーで鳴らす）。
   const spawnMelodyDrop = (note: string) => {
@@ -267,7 +281,7 @@ export function RainSystem() {
           z={s.z}
           y={s.y}
           geometry={dropGeometry}
-          material={dropMaterial}
+          material={splashMaterial}
           onDone={handleSplashDone}
         />
       ))}
