@@ -6,6 +6,9 @@
 
 ![screenshot](docs/screenshot.png)
 
+## アクセス
+https://hoshikanade.v41.me/
+
 ## 起動方法
 
 操作の正典は `Makefile`。`make help` で全ターゲットを表示できる。
