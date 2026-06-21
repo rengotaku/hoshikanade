@@ -1,0 +1,6 @@
+# Cloudflare Pages 設定（静的サイト hoshikanade）。
+# - 手動: `make deploy`（= npx wrangler pages deploy） / Git連携: ダッシュボードで本リポジトリを接続。
+# - 初回のみ: `npx wrangler pages project create hoshikanade --production-branch main`
+name = "hoshikanade"
+pages_build_output_dir = "dist"
+compatibility_date = "2026-06-22"

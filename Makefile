@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help run dev stop status install build preview smoke typecheck ci clean
+.PHONY: help run dev stop status install build preview smoke typecheck ci clean deploy
 
 NPM ?= npm
 PORT ?= 5173
@@ -39,3 +39,6 @@ ci: build smoke ## ビルド＋煙テスト（検証一式）
 
 clean: ## ビルド成果物を削除
 	rm -rf dist
+
+deploy: build ## Cloudflare Pages へ手動デプロイ（dist を direct upload）
+	npx wrangler pages deploy --branch=main
