@@ -8,6 +8,9 @@ dist
 dist-ssr
 *.local
 
+# Cloudflare wrangler のローカル状態
+.wrangler
+
 # Editor
 .vscode/*
 !.vscode/extensions.json
