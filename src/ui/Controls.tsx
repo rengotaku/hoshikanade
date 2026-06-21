@@ -257,7 +257,8 @@ export function Controls() {
           </button>
 
           <label className="control-row">
-            <span className="control-label"><Sparkles size={14} /> 星の量（{Math.round(Math.max(0, (rain - 0.5) * 2) * 100)}%）</span>
+            {/* 表示はつまみ位置そのまま（既定=中央=50%）。実効量は中央=0（RainSystem で remap）。 */}
+            <span className="control-label"><Sparkles size={14} /> 星の量（{Math.round(rain * 100)}%）</span>
             <input
               type="range"
               min={0}
