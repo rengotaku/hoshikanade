@@ -1,9 +1,70 @@
 import { useMemo, useRef } from 'react'
 import { useFrame } from '@react-three/fiber'
-import { AdditiveBlending, DoubleSide, type DirectionalLight, type Group, type Mesh } from 'three'
+import {
+  AdditiveBlending,
+  CanvasTexture,
+  Color,
+  DoubleSide,
+  type DirectionalLight,
+  type Group,
+  type Mesh,
+} from 'three'
 import { POND_HALF } from '../config'
 import { settings } from '../state/settings'
 import { quality } from '../util/quality'
+
+/**
+ * 惑星の手続き的テクスチャ（外部アセット不要・オフライン可）。
+ * ベース色に、ガス惑星風の横縞と斑点でムラを描き、のっぺり感をなくす。
+ * seed で惑星ごとに異なる柄に（決定的）。
+ */
+function makePlanetTexture(hex: string, seed: number): CanvasTexture {
+  const w = 256
+  const h = 128
+  const c = document.createElement('canvas')
+  c.width = w
+  c.height = h
+  const ctx = c.getContext('2d')!
+  const base = new Color(hex)
+  // 決定的な擬似乱数（seed 依存）。
+  let s = seed * 127.1 + 311.7
+  const rnd = () => {
+    s = Math.sin(s) * 43758.5453
+    return s - Math.floor(s)
+  }
+  const css = (col: Color, a: number) =>
+    `rgba(${Math.round(col.r * 255)},${Math.round(col.g * 255)},${Math.round(col.b * 255)},${a})`
+
+  ctx.fillStyle = css(base, 1)
+  ctx.fillRect(0, 0, w, h)
+
+  // 横縞（緯度方向のバンド）。
+  const bands = 5 + Math.floor(rnd() * 6)
+  for (let y = 0; y < h; y++) {
+    const t = Math.sin((y / h) * Math.PI * bands + seed) * 0.5 + 0.5
+    const l = (t - 0.5) * 0.28
+    const col = base.clone().offsetHSL(0, 0, l)
+    ctx.fillStyle = css(col, 0.5)
+    ctx.fillRect(0, y, w, 1)
+  }
+
+  // 斑点・渦（明暗のムラ）。
+  for (let i = 0; i < 220; i++) {
+    const x = rnd() * w
+    const y = rnd() * h
+    const r = 2 + rnd() * 16
+    const l = (rnd() - 0.5) * 0.5
+    const col = base.clone().offsetHSL((rnd() - 0.5) * 0.04, 0, l)
+    ctx.fillStyle = css(col, 0.1 + rnd() * 0.25)
+    ctx.beginPath()
+    ctx.arc(x, y, r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+
+  const tex = new CanvasTexture(c)
+  tex.needsUpdate = true
+  return tex
+}
 
 /**
  * 音板（原点）を中心に、太陽・月・惑星が周回するミニ太陽系。
@@ -53,6 +114,7 @@ export function Celestial() {
   const skyTime = useRef(0)
 
   const t0 = useMemo(() => PLANETS.map((p) => p.phase), [])
+  const planetTex = useMemo(() => PLANETS.map((p, i) => makePlanetTexture(p.color, i + 1)), [])
 
   useFrame((_, delta) => {
     skyTime.current += delta * fallToSkyRate(settings.fallSpeed)
@@ -134,10 +196,12 @@ export function Celestial() {
         >
           <mesh>
             <sphereGeometry args={[p.size, 32, 32]} />
-            {/* 太陽光で昼夜の境(陰影)が立つよう、環境フィルを抑える。暗側が潰れない程度に自発光。 */}
+            {/* 手続き的テクスチャで質感。太陽光で昼夜の境(陰影)が立つよう環境フィルを抑え、暗側は自発光で潰さない。 */}
             <meshStandardMaterial
-              color={p.color}
-              roughness={0.6}
+              map={planetTex[i]}
+              bumpMap={planetTex[i]}
+              bumpScale={0.015}
+              roughness={0.7}
               metalness={0}
               envMapIntensity={0.25}
               emissive={p.color}
