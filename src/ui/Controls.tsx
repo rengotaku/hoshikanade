@@ -11,12 +11,13 @@ import {
 } from '../state/settings'
 import {
   addLayer,
-  appendBlankSection,
-  appendSection,
+  appendMeasureToAll,
+  blankMeasureNotes,
+  createLayer,
   getLayers,
   getSections,
   removeLayer,
-  removeSection,
+  removeMeasureFromAll,
   replaceSection,
   sectionSlice,
   setLayerTempo,
@@ -34,13 +35,13 @@ import {
   CircleDot,
   Download,
   FileMusic,
+  Layers,
   LayoutGrid,
   Lock,
   Music,
   Pencil,
   Plus,
   Rows3,
-  SquarePlus,
   Settings,
   Sparkles,
   Trash2,
@@ -128,22 +129,21 @@ export function Controls() {
 
   const handleDrawComplete = (strokes: Stroke[], size: { w: number; h: number }) => {
     const melody = strokesToMelody(strokes, size.w, size.h, notesForLevel(settings.rangeLevel))
-    if (!melody.length) {
-      closeDraw()
-      return
-    }
-    // 再表示で実物の線を見せるため、描いた軌跡を正規化座標で保存する。
-    const norm = strokes
-      .map((s) => s.map((p) => ({ x: p.x / size.w, y: p.y / size.h })))
-      .filter((s) => s.length >= 2)
+    // 何も描かなければ空（無音）小節として登録する（1小節目を空にできる）。
+    const hasMelody = melody.length > 0
+    const measure = hasMelody ? melody : blankMeasureNotes()
+    // 再表示で実物の線を見せるため、描いた軌跡を正規化座標で保存する（空なら無し）。
+    const norm = hasMelody
+      ? strokes.map((s) => s.map((p) => ({ x: p.x / size.w, y: p.y / size.h }))).filter((s) => s.length >= 2)
+      : undefined
     if (editTarget !== null) {
-      // 小節を描き直す：その小節だけ差し替える（色・個別テンポ・有効状態は維持）。
-      replaceSection(editTarget.id, editTarget.index, melody, norm)
+      // 小節を描き直す（空なら無音化）：その小節だけ差し替える。
+      replaceSection(editTarget.id, editTarget.index, measure, norm)
     } else if (appendId !== null) {
-      // 小節を継ぎ足す：対象レイヤーの旋律末尾へ連結し、1つの長いメロディにする。
-      appendSection(appendId, melody, norm)
+      // L1 に小節を継ぎ足し、他レイヤーには空小節を継ぎ足して縦の整合を保つ。
+      appendMeasureToAll(appendId, measure, norm)
     } else {
-      addLayer(melody, norm) // 個別テンポは中立(0.5)。全体の速さは「時の流れ」(マスター)で効く
+      addLayer(measure, norm) // L1 を新規作成（空でも可）。個別テンポは中立(0.5)。
     }
     closeDraw()
   }
@@ -220,13 +220,24 @@ export function Controls() {
             <X size={ICON} />
           </button>
 
-          <button className="control-toggle primary" onClick={() => setDrawing(true)}>
-            <Pencil size={ICON} /> 星を落書き
-          </button>
+          {layers.length === 0 ? (
+            // 最初のレイヤー(L1)は落書きから作る（空でも登録可）。
+            <button className="control-toggle primary" onClick={() => setDrawing(true)}>
+              <Pencil size={ICON} /> 星を落書き
+            </button>
+          ) : (
+            // L2 以降は落書きではなく「レイヤーを作成」。L1 と同数の空小節で生成。
+            <button className="control-toggle primary" onClick={() => createLayer()}>
+              <Layers size={ICON} /> レイヤーを作成
+            </button>
+          )}
 
           {layers.length > 0 && (
             <div className="layer-list">
-              {layers.map((l, i) => (
+              {layers.map((l, i) => {
+                // 先頭レイヤー(L1)がマスター：小節の追加(＋)・削除(×)は L1 のみ。
+                const isMaster = i === 0
+                return (
                 <div key={l.id} className={`layer-row ${l.enabled ? '' : 'off'}`}>
                   <div className="layer-head">
                     <span className="layer-dot" style={{ background: l.color }} />
@@ -239,7 +250,7 @@ export function Controls() {
                     </button>
                   </div>
 
-                  {/* 小節カード：タップで描き直し、× で削除、＋ で末尾に小節追加 */}
+                  {/* 小節カード：タップで描き直し。× / ＋ は L1(マスター)のみ。 */}
                   <div className="section-cards">
                     {getSections(l).map((_, idx) => (
                       <span key={`${l.id}-${idx}`} className="section-card-wrap">
@@ -268,32 +279,28 @@ export function Controls() {
                             />
                           </svg>
                         </button>
-                        <button
-                          className="section-del"
-                          onClick={() => removeSection(l.id, idx)}
-                          aria-label={`小節${idx + 1}を削除`}
-                          title="この小節を削除"
-                        >
-                          <X size={11} />
-                        </button>
+                        {isMaster && (
+                          <button
+                            className="section-del"
+                            onClick={() => removeMeasureFromAll(idx)}
+                            aria-label={`小節${idx + 1}を削除`}
+                            title="この小節を削除（全レイヤーの同じ位置も削除）"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
                       </span>
                     ))}
-                    <button
-                      className="section-add"
-                      onClick={() => startAppend(l.id)}
-                      aria-label="小節を追加"
-                      title="小節を追加（空のキャンバスに描く）"
-                    >
-                      <Plus size={14} />
-                    </button>
-                    <button
-                      className="section-add blank"
-                      onClick={() => appendBlankSection(l.id)}
-                      aria-label="空の小節を追加"
-                      title="空（無音）の小節を追加（重ねる位置をずらす隙間）"
-                    >
-                      <SquarePlus size={14} />
-                    </button>
+                    {isMaster && (
+                      <button
+                        className="section-add"
+                        onClick={() => startAppend(l.id)}
+                        aria-label="小節を追加"
+                        title="小節を追加（キャンバスに描く／空で完了も可）"
+                      >
+                        <Plus size={14} />
+                      </button>
+                    )}
                   </div>
                   <label className="layer-tempo" title="この落書きの落下速度">
                     <input
@@ -306,7 +313,8 @@ export function Controls() {
                     />
                   </label>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

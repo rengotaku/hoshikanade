@@ -74,7 +74,12 @@ export function sectionSlice(
   }
 }
 
-/** 落書き1つ＝小節1つで新規レイヤーを作る。 */
+/** 空（無音）の1小節ぶんの音符列（休符イベント）を作る。 */
+export function blankMeasureNotes(): SongNote[] {
+  return Array.from({ length: STEPS_PER_MEASURE }, () => ({ notes: [] as string[], beats: 1 }))
+}
+
+/** 落書き1つ＝小節1つで新規レイヤー（L1）を作る。空小節でも可（1小節目を空にできる）。 */
 export function addLayer(notes: SongNote[], strokes?: NormPoint[][], tempo = DEFAULT_TEMPO): void {
   if (!notes.length) return
   const color = COLORS[(nextId - 1) % COLORS.length]
@@ -84,33 +89,82 @@ export function addLayer(notes: SongNote[], strokes?: NormPoint[][], tempo = DEF
 }
 
 /**
- * 小節（節）を末尾に継ぎ足す：対象レイヤーの notes / strokes を連結し、sections に1小節追加する。
- * メロディは notes をループ再生するため、連結すると1つの長い旋律になる（色・tempo・有効状態は維持）。
+ * L2 以降を作る：マスター（先頭レイヤー）と同じ数の空小節を持つレイヤーを追加する。
+ * 落書きは持たず、各小節をタップして埋める。先頭が無ければ1小節ぶんで作る。
  */
-export function appendSection(id: number, notes: SongNote[], strokes?: NormPoint[][]): void {
+export function createLayer(): void {
+  const master = layers[0]
+  const count = master ? getSections(master).length : 1
+  const notes = Array.from({ length: count }, () => blankMeasureNotes()).flat()
+  const sections: LayerSection[] = Array.from({ length: count }, () => ({
+    noteCount: STEPS_PER_MEASURE,
+    strokeCount: 0,
+  }))
+  const color = COLORS[(nextId - 1) % COLORS.length]
+  layers = [
+    ...layers,
+    { id: nextId++, notes, enabled: true, color, strokes: undefined, sections, tempo: DEFAULT_TEMPO },
+  ]
+  emit()
+}
+
+/**
+ * マスター（masterId）に小節を継ぎ足し、他の全レイヤーには空小節を継ぎ足す。
+ * 全レイヤーの小節数を L1 に揃えたまま、末尾に1小節増やす（縦の整合を保つ）。
+ */
+export function appendMeasureToAll(masterId: number, notes: SongNote[], strokes?: NormPoint[][]): void {
   if (!notes.length) return
   const strokeList = strokes ?? []
   layers = layers.map((l) => {
-    if (l.id !== id) return l
-    const merged = [...(l.strokes ?? []), ...strokeList]
+    if (l.id === masterId) {
+      const merged = [...(l.strokes ?? []), ...strokeList]
+      return {
+        ...l,
+        notes: [...l.notes, ...notes],
+        strokes: merged.length ? merged : undefined,
+        sections: [...getSections(l), { noteCount: notes.length, strokeCount: strokeList.length }],
+      }
+    }
+    const blank = blankMeasureNotes()
     return {
       ...l,
-      notes: [...l.notes, ...notes],
-      // strokes が空のままなら undefined を維持（addLayer の不変条件に揃える）。
-      strokes: merged.length ? merged : undefined,
-      sections: [...getSections(l), { noteCount: notes.length, strokeCount: strokeList.length }],
+      notes: [...l.notes, ...blank],
+      sections: [...getSections(l), { noteCount: blank.length, strokeCount: 0 }],
     }
   })
   emit()
 }
 
 /**
- * 空（無音）の小節を末尾に継ぎ足す：休符イベント（空 notes）を1小節ぶん連結する。
- * 落書きは持たないので、再生では無音のまま時間だけ進む（重ねる位置をずらす隙間用）。
+ * 指定位置の小節を全レイヤーから削除する（L1 がマスター。同じ位置を縦に揃えて消す）。
+ * 小節が無くなったレイヤーは丸ごと削除する。
  */
-export function appendBlankSection(id: number): void {
-  const notes: SongNote[] = Array.from({ length: STEPS_PER_MEASURE }, () => ({ notes: [], beats: 1 }))
-  appendSection(id, notes)
+export function removeMeasureFromAll(index: number): void {
+  layers = layers
+    .map((l) => {
+      const secs = getSections(l)
+      if (index < 0 || index >= secs.length) return l // この小節を持たないレイヤーはそのまま
+      let noteStart = 0
+      let strokeStart = 0
+      for (let i = 0; i < index; i++) {
+        noteStart += secs[i].noteCount
+        strokeStart += secs[i].strokeCount
+      }
+      const old = secs[index]
+      const flatStrokes = l.strokes ?? []
+      const mergedStrokes = [
+        ...flatStrokes.slice(0, strokeStart),
+        ...flatStrokes.slice(strokeStart + old.strokeCount),
+      ]
+      return {
+        ...l,
+        notes: [...l.notes.slice(0, noteStart), ...l.notes.slice(noteStart + old.noteCount)],
+        strokes: mergedStrokes.length ? mergedStrokes : undefined,
+        sections: secs.filter((_, i) => i !== index),
+      }
+    })
+    .filter((l) => getSections(l).length > 0)
+  emit()
 }
 
 /** 指定小節だけを描き直す：その小節のスライスを差し替え、境界を更新する。 */
@@ -148,41 +202,6 @@ export function replaceSection(
       ),
     }
   })
-  emit()
-}
-
-/** 指定小節を削除する。最後の1小節を消すとレイヤーごと削除する。 */
-export function removeSection(id: number, index: number): void {
-  const target = layers.find((l) => l.id === id)
-  if (!target) return
-  const secs = getSections(target)
-  if (index < 0 || index >= secs.length) return
-  if (secs.length <= 1) {
-    removeLayer(id)
-    return
-  }
-  let noteStart = 0
-  let strokeStart = 0
-  for (let i = 0; i < index; i++) {
-    noteStart += secs[i].noteCount
-    strokeStart += secs[i].strokeCount
-  }
-  const old = secs[index]
-  const flatStrokes = target.strokes ?? []
-  const mergedStrokes = [
-    ...flatStrokes.slice(0, strokeStart),
-    ...flatStrokes.slice(strokeStart + old.strokeCount),
-  ]
-  layers = layers.map((l) =>
-    l.id === id
-      ? {
-          ...l,
-          notes: [...l.notes.slice(0, noteStart), ...l.notes.slice(noteStart + old.noteCount)],
-          strokes: mergedStrokes.length ? mergedStrokes : undefined,
-          sections: secs.filter((_, i) => i !== index),
-        }
-      : l,
-  )
   emit()
 }
 
