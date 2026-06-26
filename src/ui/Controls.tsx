@@ -95,6 +95,44 @@ export function Controls() {
   const [scoreMsg, setScoreMsg] = useState<string | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
 
+  // 小節カード列のドラッグ横スクロール（マウスのみ。タッチ/ペンはネイティブのスワイプに任せる）。
+  const cardDrag = useRef<{
+    el: HTMLDivElement
+    startX: number
+    startScroll: number
+    moved: boolean
+  } | null>(null)
+
+  const onCardsPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType !== 'mouse') return
+    cardDrag.current = {
+      el: e.currentTarget,
+      startX: e.clientX,
+      startScroll: e.currentTarget.scrollLeft,
+      moved: false,
+    }
+  }
+  const onCardsPointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    const d = cardDrag.current
+    if (!d) return
+    const dx = e.clientX - d.startX
+    if (!d.moved && Math.abs(dx) < 6) return // しきい値未満はクリック扱い
+    d.moved = true
+    d.el.scrollLeft = d.startScroll - dx
+  }
+  const onCardsPointerUp = () => {
+    // moved は直後の click 抑制に使うので、ここでは消さず click 側で参照・解除する。
+    if (cardDrag.current && !cardDrag.current.moved) cardDrag.current = null
+  }
+  const onCardsClickCapture = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (cardDrag.current?.moved) {
+      // ドラッグ後の click はカード編集を発火させない。
+      e.stopPropagation()
+      e.preventDefault()
+    }
+    cardDrag.current = null
+  }
+
   const layers = useSyncExternalStore(subscribeLayers, getLayers, getLayers)
   // 落書きの音は描いた時点の音域でバーへマップされるため、1つでもあれば音域を固定する。
   const rangeLocked = layers.length > 0
@@ -250,8 +288,15 @@ export function Controls() {
                     </button>
                   </div>
 
-                  {/* 小節カード：タップで描き直し。× / ＋ は L1(マスター)のみ。 */}
-                  <div className="section-cards">
+                  {/* 小節カード：タップで描き直し。× / ＋ は L1(マスター)のみ。列はドラッグで横スクロール。 */}
+                  <div
+                    className="section-cards"
+                    onPointerDown={onCardsPointerDown}
+                    onPointerMove={onCardsPointerMove}
+                    onPointerUp={onCardsPointerUp}
+                    onPointerCancel={onCardsPointerUp}
+                    onClickCapture={onCardsClickCapture}
+                  >
                     {getSections(l).map((_, idx) => (
                       <span key={`${l.id}-${idx}`} className="section-card-wrap">
                         <button
