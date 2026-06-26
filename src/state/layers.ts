@@ -1,4 +1,5 @@
 import type { SongNote } from '../audio/songs'
+import { STEPS_PER_MEASURE } from '../score/drawMelody'
 
 /** 描いた軌跡の 1 点（正規化座標 0..1。解像度に依存しないので再表示で実物を描ける）。 */
 export type NormPoint = { x: number; y: number }
@@ -101,6 +102,15 @@ export function appendSection(id: number, notes: SongNote[], strokes?: NormPoint
     }
   })
   emit()
+}
+
+/**
+ * 空（無音）の小節を末尾に継ぎ足す：休符イベント（空 notes）を1小節ぶん連結する。
+ * 落書きは持たないので、再生では無音のまま時間だけ進む（重ねる位置をずらす隙間用）。
+ */
+export function appendBlankSection(id: number): void {
+  const notes: SongNote[] = Array.from({ length: STEPS_PER_MEASURE }, () => ({ notes: [], beats: 1 }))
+  appendSection(id, notes)
 }
 
 /** 指定小節だけを描き直す：その小節のスライスを差し替え、境界を更新する。 */
