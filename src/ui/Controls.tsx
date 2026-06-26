@@ -11,6 +11,7 @@ import {
 } from '../state/settings'
 import {
   addLayer,
+  appendToLayer,
   getLayers,
   removeLayer,
   setLayerTempo,
@@ -32,6 +33,7 @@ import {
   Lock,
   Music,
   Pencil,
+  Plus,
   Rows3,
   Settings,
   Sparkles,
@@ -57,6 +59,7 @@ export function Controls() {
   const [circle, setCircle] = useState(settings.barShape === 'circle')
   const [drawing, setDrawing] = useState(false)
   const [editingId, setEditingId] = useState<number | null>(null)
+  const [appendId, setAppendId] = useState<number | null>(null)
   const [overviewOpen, setOverviewOpen] = useState(false)
   const [composeOpen, setComposeOpen] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -84,9 +87,15 @@ export function Controls() {
     setDrawing(true)
   }
 
+  const startAppend = (id: number) => {
+    setAppendId(id)
+    setDrawing(true)
+  }
+
   const closeDraw = () => {
     setDrawing(false)
     setEditingId(null)
+    setAppendId(null)
   }
 
   const handleDrawComplete = (strokes: Stroke[], size: { w: number; h: number }) => {
@@ -99,7 +108,10 @@ export function Controls() {
     const norm = strokes
       .map((s) => s.map((p) => ({ x: p.x / size.w, y: p.y / size.h })))
       .filter((s) => s.length >= 2)
-    if (editingId !== null) {
+    if (appendId !== null) {
+      // 節を継ぎ足す：対象レイヤーの旋律末尾へ連結し、1つの長いメロディにする。
+      appendToLayer(appendId, melody, norm)
+    } else if (editingId !== null) {
       // 再編集：notes を作り直し、軌跡も差し替える。色・個別テンポ・有効状態は維持。
       updateLayer(editingId, { notes: melody, strokes: norm })
     } else {
@@ -179,6 +191,14 @@ export function Controls() {
                     <span className="layer-name">{i + 1}</span>
                     <button className="layer-btn" onClick={() => startEdit(l.id)} aria-label="編集">
                       <Pencil size={15} />
+                    </button>
+                    <button
+                      className="layer-btn"
+                      onClick={() => startAppend(l.id)}
+                      aria-label="節を追加"
+                      title="節を追加（旋律を継ぎ足す）"
+                    >
+                      <Plus size={15} />
                     </button>
                     <button className="layer-btn" onClick={() => toggleLayer(l.id)} aria-label="有効/無効">
                       {l.enabled ? <Volume2 size={15} /> : <VolumeX size={15} />}
