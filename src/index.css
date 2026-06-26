@@ -374,7 +374,7 @@ body {
   color: #fff;
 }
 
-/* --- 小節カード（横スクロールの一列） --- */
+/* --- 小節カード（横一列。スクロールバーは出さず、列をドラッグして横スクロール） --- */
 .section-cards {
   display: flex;
   flex-wrap: nowrap;
@@ -383,7 +383,20 @@ body {
   overflow-x: auto;
   /* 削除バッジ（top/right -0.35rem）がスクロール枠で切れないよう余白を確保。 */
   padding: 0.45rem 0.4rem 0.25rem;
-  scrollbar-width: thin;
+  cursor: grab;
+  /* 横スクロールバーを消す（ドラッグ／スワイプでスクロール）。 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  /* タッチは横方向のパンに限定（縦のレイヤー一覧スクロールと干渉させない）。 */
+  touch-action: pan-x;
+}
+
+.section-cards::-webkit-scrollbar {
+  display: none;
+}
+
+.section-cards:active {
+  cursor: grabbing;
 }
 
 .section-card-wrap {
