@@ -62,6 +62,24 @@ export function updateLayer(
   emit()
 }
 
+/**
+ * 節を継ぎ足す：対象レイヤーの末尾へ notes / strokes を連結する。
+ * メロディは notes をループ再生するため、連結すると1つの長い旋律になる（色・tempo・有効状態は維持）。
+ */
+export function appendToLayer(id: number, notes: SongNote[], strokes?: NormPoint[][]): void {
+  if (!notes.length) return
+  layers = layers.map((l) =>
+    l.id === id
+      ? {
+          ...l,
+          notes: [...l.notes, ...notes],
+          strokes: strokes && strokes.length ? [...(l.strokes ?? []), ...strokes] : l.strokes,
+        }
+      : l,
+  )
+  emit()
+}
+
 export function setLayerTempo(id: number, tempo: number): void {
   const t = Math.max(0, Math.min(1, tempo))
   layers = layers.map((l) => (l.id === id ? { ...l, tempo: t } : l))
