@@ -311,6 +311,14 @@ export function Controls() {
           <div className="control-iorow">
             <button
               className="control-ico"
+              onClick={() => setSettingsOpen(true)}
+              aria-label="設定"
+              title="設定"
+            >
+              <Settings size={16} />
+            </button>
+            <button
+              className="control-ico"
               disabled={!layers.length}
               onClick={() => exportComposition(getLayers())}
               aria-label="エクスポート"
@@ -330,21 +338,13 @@ export function Controls() {
         </div>
       )}
 
-      {/* ===== 左: 星と場の設定メニュー ===== */}
-      {!drawing && !overviewOpen && !settingsOpen && (
-        <button
-          className="controls-fab left"
-          onClick={() => setSettingsOpen(true)}
-          aria-label="設定メニューを開く"
-        >
-          <Settings size={ICON} />
-        </button>
-      )}
-      {!drawing && !overviewOpen && settingsOpen && (
-        <div className="controls left">
-          <button className="controls-close" onClick={() => setSettingsOpen(false)} aria-label="閉じる">
-            <X size={ICON} />
-          </button>
+      {/* ===== 設定モーダル（画面中央。作曲メニュー内の設定ボタンから開く） ===== */}
+      {settingsOpen && (
+        <div className="settings-modal" onClick={() => setSettingsOpen(false)}>
+          <div className="controls settings-panel" onClick={(e) => e.stopPropagation()}>
+            <button className="controls-close" onClick={() => setSettingsOpen(false)} aria-label="閉じる">
+              <X size={ICON} />
+            </button>
 
           <button
             className={`control-toggle ${rainOn ? 'on' : ''}`}
@@ -458,6 +458,7 @@ export function Controls() {
               {mute ? <VolumeX size={ICON} /> : <Volume2 size={ICON} />}
             </button>
           </div>
+        </div>
         </div>
       )}
     </>

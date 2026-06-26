@@ -71,16 +71,6 @@ body {
   background: rgba(35, 60, 84, 0.75);
 }
 
-.controls-fab.left {
-  right: auto;
-  left: 1.1rem;
-}
-
-.controls.left {
-  right: auto;
-  left: 1.1rem;
-}
-
 .control-iconrow {
   display: flex;
   gap: 0.5rem;
@@ -126,7 +116,34 @@ body {
   font-size: 0.8rem;
   font-weight: 300;
   user-select: none;
-  width: 11.5rem;
+  width: 14.5rem;
+}
+
+/* ===== 設定モーダル（画面中央） ===== */
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(8, 16, 26, 0.55);
+  backdrop-filter: blur(3px);
+}
+
+/* モーダル内の設定パネル：.controls のスライダー等の見た目を流用しつつ位置だけ中央へ。 */
+.controls.settings-panel {
+  position: static;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  width: min(22rem, 100%);
+  max-height: calc(100dvh - 3rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: rgba(14, 28, 42, 0.92);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
 }
 
 .control-row {
@@ -300,7 +317,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 0.3rem;
-  max-height: 9rem;
+  max-height: 15rem;
   overflow-y: auto;
 }
 
@@ -357,17 +374,22 @@ body {
   color: #fff;
 }
 
-/* --- 小節カード（横並び） --- */
+/* --- 小節カード（横スクロールの一列） --- */
 .section-cards {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 0.3rem;
+  overflow-x: auto;
+  /* 削除バッジ（top/right -0.35rem）がスクロール枠で切れないよう余白を確保。 */
+  padding: 0.45rem 0.4rem 0.25rem;
+  scrollbar-width: thin;
 }
 
 .section-card-wrap {
   position: relative;
   display: inline-flex;
+  flex: 0 0 auto;
 }
 
 .section-card {
@@ -426,6 +448,7 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+  flex: 0 0 auto;
   width: 1.7rem;
   height: 1.7rem;
   border: 1px dashed rgba(140, 180, 205, 0.55);
@@ -678,6 +701,7 @@ button,
 
 /* パネル内スクロールがページへ波及しないように。 */
 .layer-list,
+.section-cards,
 .overview-legend {
   overscroll-behavior: contain;
 }
@@ -693,13 +717,6 @@ button,
   right: calc(1.1rem + env(safe-area-inset-right));
   bottom: calc(1.1rem + env(safe-area-inset-bottom));
 }
-.controls-fab.left {
-  left: calc(1.1rem + env(safe-area-inset-left));
-}
-.controls.left {
-  left: calc(1.1rem + env(safe-area-inset-left));
-}
-
 .app-title {
   top: calc(1rem + env(safe-area-inset-top));
   left: calc(1.1rem + env(safe-area-inset-left));
