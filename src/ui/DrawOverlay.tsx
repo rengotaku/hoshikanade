@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Eraser, Info, Pencil } from 'lucide-react'
+import { Eraser, Eye, EyeOff, Info, Pencil } from 'lucide-react'
 import { TOTAL_STEPS, type Point, type Stroke } from '../score/drawMelody'
 import { layerLines } from '../score/layerLines'
 import type { Layer, NormPoint } from '../state/layers'
@@ -78,6 +78,8 @@ export function DrawOverlay({
   const [current, setCurrent] = useState<Point[]>([])
   const [mode, setMode] = useState<Mode>('pen')
   const [infoOpen, setInfoOpen] = useState(false)
+  // 他レイヤーの薄い表示（ゴースト）を編集中だけ消せる。音には影響しない。
+  const [showPrior, setShowPrior] = useState(true)
   const strokesRef = useRef<Stroke[]>(initial.current)
   const curRef = useRef<Point[]>([])
   const drawing = useRef(false)
@@ -181,9 +183,10 @@ export function DrawOverlay({
           </text>
         ))}
 
-        {/* 重ねがけ用: 既存レイヤーを薄く表示（描いた軌跡があれば実物を再表示） */}
-        {priorLayers.flatMap((l) =>
-          layerLines(l, w, h).map((pts, i) => (
+        {/* 重ねがけ用: 既存レイヤーを薄く表示（描いた軌跡があれば実物を再表示）。トグルで非表示にできる。 */}
+        {showPrior &&
+          priorLayers.flatMap((l) =>
+            layerLines(l, w, h).map((pts, i) => (
             <polyline
               key={`${l.id}-${i}`}
               points={pts}
@@ -254,6 +257,17 @@ export function DrawOverlay({
         >
           <Eraser size={16} /> 消しゴム
         </button>
+        {priorLayers.length > 0 && (
+          <button
+            className={`draw-tool ${showPrior ? '' : 'on'}`}
+            onClick={() => setShowPrior((v) => !v)}
+            aria-label="他レイヤーの表示切替"
+            aria-pressed={!showPrior}
+            title="他のレイヤーの薄い表示をオン/オフ（音には影響しません）"
+          >
+            {showPrior ? <Eye size={16} /> : <EyeOff size={16} />} 他レイヤー
+          </button>
+        )}
       </div>
 
       <div className="draw-actions" onPointerDown={(e) => e.stopPropagation()}>

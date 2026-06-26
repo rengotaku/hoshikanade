@@ -11,6 +11,7 @@ import {
 } from '../state/settings'
 import {
   addLayer,
+  appendBlankSection,
   appendSection,
   getLayers,
   getSections,
@@ -39,6 +40,7 @@ import {
   Pencil,
   Plus,
   Rows3,
+  SquarePlus,
   Settings,
   Sparkles,
   Trash2,
@@ -283,6 +285,14 @@ export function Controls() {
                       title="小節を追加（空のキャンバスに描く）"
                     >
                       <Plus size={14} />
+                    </button>
+                    <button
+                      className="section-add blank"
+                      onClick={() => appendBlankSection(l.id)}
+                      aria-label="空の小節を追加"
+                      title="空（無音）の小節を追加（重ねる位置をずらす隙間）"
+                    >
+                      <SquarePlus size={14} />
                     </button>
                   </div>
                   <label className="layer-tempo" title="この落書きの落下速度">
